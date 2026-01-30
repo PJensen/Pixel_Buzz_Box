@@ -109,6 +109,12 @@ static uint32_t ringUntilMs = 0;
 static float wingPhase = 0.0f; // radians, advances with speed
 static float wingSpeed = 0.0f; // 0..1
 
+// ---- pollen chirp ----
+static bool pollenChirpActive = false;
+static bool pollenChirpPending = false;
+static uint8_t pollenChirpStep = 0;
+static uint32_t pollenChirpNextMs = 0;
+
 // RNG (xorshift32)
 static uint32_t rngState = 0xA5A5F00Du;
 static inline uint32_t xrnd() {
@@ -587,6 +593,39 @@ static bool allFlowersGone() {
   return true;
 }
 
+static void startPollenChirp(uint32_t nowMs) {
+  pollenChirpActive = true;
+  pollenChirpStep = 0;
+  pollenChirpNextMs = nowMs;
+}
+
+static void updatePollenChirp(uint32_t nowMs) {
+  if (!pollenChirpActive) return;
+  if ((int32_t)(nowMs - pollenChirpNextMs) < 0) return;
+
+  switch (pollenChirpStep) {
+    case 0:
+      tone(PIN_BUZZ, 620, 60);
+      pollenChirpNextMs = nowMs + 70;
+      pollenChirpStep++;
+      break;
+    case 1:
+      tone(PIN_BUZZ, 760, 60);
+      pollenChirpNextMs = nowMs + 70;
+      pollenChirpStep++;
+      break;
+    case 2:
+      tone(PIN_BUZZ, 520, 80);
+      pollenChirpNextMs = nowMs + 90;
+      pollenChirpStep++;
+      break;
+    default:
+      pollenChirpActive = false;
+      noTone(PIN_BUZZ);
+      break;
+  }
+}
+
 static void fullRepaint(uint32_t nowMs) {
   int bx = (int)beeX;
   int by = (int)beeY;
@@ -605,6 +644,7 @@ static void tryCollectPollen(int bx, int by) {
     if (dx*dx + dy*dy <= hitR*hitR) {
       hasPollen = true;
       f.alive = 0;
+      pollenChirpPending = true;
       return;
     }
   }
@@ -768,16 +808,18 @@ void loop() {
   // ---------- BUZZ (flap-driven) ----------
   // Cheap update cadence so tone() isn't spammed.
   static uint32_t lastBuzzMs = 0;
-  if ((uint32_t)(now - lastBuzzMs) >= 30) { // ~33 Hz
+  if ((uint32_t)(now - lastBuzzMs) >= 40) { // ~25 Hz
     lastBuzzMs = now;
 
-    if (wingSpeed > 0.06f) {
-      int freq = 100 + (int)(wingSpeed * 680.0f); // ~120..800 Hz
-      if (freq < 60)   freq = 60;
-      if (freq > 1200) freq = 1200;
-      tone(PIN_BUZZ, freq);
-    } else {
-      noTone(PIN_BUZZ);
+    if (!pollenChirpActive) {
+      if (wingSpeed > 0.08f) {
+        int freq = 90 + (int)(wingSpeed * 360.0f); // ~120..450 Hz
+        if (freq < 80)  freq = 80;
+        if (freq > 520) freq = 520;
+        tone(PIN_BUZZ, freq);
+      } else {
+        noTone(PIN_BUZZ);
+      }
     }
   }
 
@@ -799,7 +841,12 @@ void loop() {
 
   // interactions
   tryCollectPollen(bx, by);
+  if (pollenChirpPending && !pollenChirpActive) {
+    pollenChirpPending = false;
+    startPollenChirp(now);
+  }
   tryStoreAtHive(bx, by, now);
+  updatePollenChirp(now);
 
   // dirty rect redraw only when needed
   static int lastX = -9999, lastY = -9999;
