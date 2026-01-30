@@ -137,6 +137,26 @@ static SndMode sndMode = SND_IDLE;
 static uint8_t sndStep = 0;
 static uint32_t sndNextMs = 0;
 
+// -------------------- BOOST --------------------
+static uint8_t depositsTowardBoost = 0;
+static uint8_t boostCharge = 0; // 0 or 1
+static uint32_t boostActiveUntilMs = 0;
+static uint32_t boostCooldownUntilMs = 0;
+
+// -------------------- RADAR --------------------
+static bool radarActive = false;
+static uint32_t radarUntilMs = 0;
+static int32_t radarTargetWX = 0;
+static int32_t radarTargetWY = 0;
+static bool radarToHive = false;
+
+// Button edge tracking
+static bool btnPrev = false;
+
+// -------------------- WING ANIM + SHADOW --------------------
+static float wingPhase = 0.0f;
+static float wingSpeed = 0.0f;
+
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
 static int readJoyY() { return analogRead(PIN_JOY_VRY); } // 0..1023
@@ -275,7 +295,8 @@ static void initFlowers() {
   }
 }
 
-// -------------------- BELT HUD FUNCTIONS --------------------
+// -------------------- FUNCTION IMPLEMENTATIONS --------------------
+// Belt HUD functions
 static void spawnBeltItem(uint32_t nowMs) {
   int freeIdx = -1;
   uint32_t oldest = 0xFFFFFFFFu;
@@ -298,27 +319,7 @@ static void updateBeltLifetimes(uint32_t nowMs) {
   }
 }
 
-// -------------------- BOOST --------------------
-static uint8_t depositsTowardBoost = 0;
-static uint8_t boostCharge = 0; // 0 or 1
-static uint32_t boostActiveUntilMs = 0;
-static uint32_t boostCooldownUntilMs = 0;
-
-// -------------------- RADAR --------------------
-static bool radarActive = false;
-static uint32_t radarUntilMs = 0;
-static int32_t radarTargetWX = 0;
-static int32_t radarTargetWY = 0;
-static bool radarToHive = false;
-
-// Button edge tracking
-static bool btnPrev = false;
-
-// -------------------- WING ANIM + SHADOW --------------------
-static float wingPhase = 0.0f;
-static float wingSpeed = 0.0f;
-
-// -------------------- SOUND FUNCTIONS --------------------
+// Sound functions
 static void startSound(SndMode m, uint32_t nowMs) {
   sndMode = m;
   sndStep = 0;
