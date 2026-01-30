@@ -163,6 +163,16 @@ static bool btnPrev = false;
 static float wingPhase = 0.0f;
 static float wingSpeed = 0.0f;
 
+// -------------------- BOOST TRAIL EFFECT --------------------
+struct TrailParticle {
+  float wx, wy;
+  uint32_t bornMs;
+  uint8_t alive;
+};
+static const int TRAIL_MAX = 12;
+static TrailParticle trail[TRAIL_MAX];
+static int trailNextIdx = 0;
+
 // -------------------- SURVIVAL TIMER --------------------
 static const float SURVIVAL_TIME_MAX = 30.0f; // seconds
 static float survivalTimeLeft = SURVIVAL_TIME_MAX;
@@ -171,7 +181,7 @@ static uint32_t gameOverMs = 0;
 
 // -------------------- WORLD CONSTRAINTS --------------------
 static const float WORLD_RADIUS_MAX = 480.0f; // 2x screen height
-static const float GRAVITY_STRENGTH = 1.8f;   // strong pull toward hive (helps 1-year-old)
+static const float GRAVITY_STRENGTH = 5.0f;   // very strong pull toward hive (joystick is sticky)
 
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
@@ -468,6 +478,53 @@ static void drawBeeShadow(Adafruit_GFX &g, int x, int y) {
     }
   }
   g.drawFastHLine(x - rx + 2, sy, rx * 2 - 4, COL_SHADOW_RIM);
+}
+
+// Trail particle functions
+static void spawnTrailParticle(float wx, float wy, uint32_t nowMs) {
+  trail[trailNextIdx].wx = wx;
+  trail[trailNextIdx].wy = wy;
+  trail[trailNextIdx].bornMs = nowMs;
+  trail[trailNextIdx].alive = 1;
+  trailNextIdx = (trailNextIdx + 1) % TRAIL_MAX;
+}
+
+static void updateTrailParticles(uint32_t nowMs) {
+  const uint32_t TRAIL_LIFE_MS = 250; // fade out after 250ms
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    if (!trail[i].alive) continue;
+    if ((uint32_t)(nowMs - trail[i].bornMs) > TRAIL_LIFE_MS) {
+      trail[i].alive = 0;
+    }
+  }
+}
+
+static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  const uint32_t TRAIL_LIFE_MS = 250;
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    if (!trail[i].alive) continue;
+    uint32_t age = nowMs - trail[i].bornMs;
+    if (age > TRAIL_LIFE_MS) continue;
+
+    // Convert world to screen
+    int sx = beeScreenCX() + (int)(trail[i].wx - beeWX);
+    int sy = beeScreenCY() + (int)(trail[i].wy - beeWY);
+
+    // Fade out based on age
+    float t = (float)age / (float)TRAIL_LIFE_MS;
+    float alpha = 1.0f - t;
+
+    // Draw particle (yellow/orange glow)
+    uint16_t c1 = rgb565((uint8_t)(255 * alpha), (uint8_t)(200 * alpha), (uint8_t)(80 * alpha));
+    uint16_t c2 = rgb565((uint8_t)(255 * alpha * 0.6f), (uint8_t)(160 * alpha * 0.6f), (uint8_t)(40 * alpha * 0.6f));
+
+    // Draw particle as small circle
+    if (alpha > 0.5f) {
+      g.fillCircle(sx + ox, sy + oy, 2, c1);
+    } else {
+      g.drawPixel(sx + ox, sy + oy, c2);
+    }
+  }
 }
 
 static void drawBee(Adafruit_GFX &g, int x, int y) {
@@ -809,6 +866,67 @@ static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy) {
   }
 }
 
+// -------------------- GAME OVER SCREEN --------------------
+static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
+  // Center panel for game over
+  int panelW = 180;
+  int panelH = 100;
+  int panelX = (tft.width() - panelW) / 2;
+  int panelY = (tft.height() - panelH) / 2 - 20;
+
+  // Draw only if this tile overlaps panel
+  int tx0 = -ox;
+  int ty0 = -oy;
+  int tx1 = tx0 + CANVAS_W - 1;
+  int ty1 = ty0 + CANVAS_H - 1;
+  if ((panelX + panelW) < tx0 || panelX > tx1 || (panelY + panelH) < ty0 || panelY > ty1) return;
+
+  // Panel background
+  uint16_t panelBg = rgb565(30, 40, 60);
+  uint16_t panelBorder = rgb565(120, 180, 220);
+  g.fillRoundRect(panelX + ox, panelY + oy, panelW, panelH, 8, panelBg);
+  g.drawRoundRect(panelX + ox, panelY + oy, panelW, panelH, 8, panelBorder);
+  g.drawRoundRect(panelX + 1 + ox, panelY + 1 + oy, panelW - 2, panelH - 2, 7, panelBorder);
+
+  // Happy messages (rotate based on score)
+  const char* messages[] = {
+    "Bee-autiful!",
+    "Buzz-tastic!",
+    "Sweet Flying!",
+    "You're the Bee!",
+    "Amazing Work!",
+    "Pollen Master!"
+  };
+  int msgIdx = score % 6;
+
+  // Title
+  g.setTextSize(2);
+  g.setTextColor(COL_YEL);
+  int titleW = strlen(messages[msgIdx]) * 12;
+  g.setCursor(panelX + (panelW - titleW) / 2 + ox, panelY + 12 + oy);
+  g.print(messages[msgIdx]);
+
+  // Score
+  g.setTextSize(3);
+  g.setTextColor(COL_WHITE);
+  g.setCursor(panelX + panelW / 2 - 30 + ox, panelY + 38 + oy);
+  g.print(score);
+
+  // Sub text
+  g.setTextSize(1);
+  g.setTextColor(COL_UI_DIM);
+  g.setCursor(panelX + 28 + ox, panelY + 66 + oy);
+  g.print("pollen delivered");
+
+  // Restart prompt (blink)
+  if ((millis() % 800) < 400) {
+    g.setTextSize(1);
+    g.setTextColor(COL_UI_GO);
+    g.setCursor(panelX + 30 + ox, panelY + 82 + oy);
+    g.print("Press to play again");
+  }
+}
+
 // -------------------- RADAR DRAW --------------------
 static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   if (!radarActive) return;
@@ -923,6 +1041,11 @@ static void tryCollectPollen(uint32_t nowMs) {
       f.alive = 0;
       // respawn elsewhere immediately
       spawnFlowerElsewhere(i);
+
+      // Auto-boost on flower pickup!
+      boostActiveUntilMs = nowMs + 500;  // 0.5 second boost
+      boostCooldownUntilMs = nowMs + 1200; // 1.2 second cooldown
+
       // chirp
       if (!soundBusy()) startSound(SND_POLLEN_CHIRP, nowMs);
       return;
@@ -944,16 +1067,6 @@ static void tryStoreAtHive(uint32_t nowMs) {
 
     // Reset survival timer on successful delivery!
     survivalTimeLeft = SURVIVAL_TIME_MAX;
-
-    // boost charge progression: every 3 deposits earns 1 charge (max 1)
-    if (boostCharge == 0) {
-      depositsTowardBoost++;
-      if (depositsTowardBoost >= 3) {
-        depositsTowardBoost = 0;
-        boostCharge = 1;
-        startSound(SND_POWERUP, nowMs);
-      }
-    }
   }
 }
 
@@ -998,6 +1111,9 @@ static void renderFrame(uint32_t nowMs) {
         drawFlower(canvas, sx + ox, sy + oy, flowers[i]);
       }
 
+      // boost trail particles (behind bee)
+      drawTrailParticles(canvas, ox, oy, nowMs);
+
       // bee shadow + bee (always on screen)
       int bcX = beeScreenCX();
       int bcY = beeScreenCY();
@@ -1015,6 +1131,11 @@ static void renderFrame(uint32_t nowMs) {
 
       // HUD (top)
       drawHUDInTile(canvas, tileX, tileY, ox, oy);
+
+      // Game over screen (overlays everything)
+      if (isGameOver) {
+        drawGameOver(canvas, ox, oy);
+      }
 
       // blit tile
       tft.drawRGBBitmap(tileX, tileY, canvas.getBuffer(), CANVAS_W, CANVAS_H);
@@ -1051,6 +1172,7 @@ void setup() {
   joyMaxY = joyCenterY;
 
   for (int i = 0; i < BELT_ITEM_N; i++) beltItems[i].alive = 0;
+  for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
 
   initFlowers();
 
@@ -1181,6 +1303,17 @@ void loop() {
   wingPhase += 2.0f * 3.1415926f * hz * dt;
   if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
 
+  // Boost trail VFX
+  if (boosting && wingSpeed > 0.3f) {
+    // Spawn trail particles every ~30ms when moving fast
+    static uint32_t lastTrailMs = 0;
+    if ((uint32_t)(now - lastTrailMs) > 30) {
+      spawnTrailParticle(beeWX, beeWY, now);
+      lastTrailMs = now;
+    }
+  }
+  updateTrailParticles(now);
+
   // Survival timer countdown
   if (!isGameOver) {
     survivalTimeLeft -= dt;
@@ -1191,8 +1324,13 @@ void loop() {
     }
   }
 
-  // Game over auto-restart after 2 seconds
-  if (isGameOver && (uint32_t)(now - gameOverMs) > 2000) {
+  // --- Button handling ---
+  bool b = joyPressedRaw();
+  bool edgeDown = (b && !btnPrev);
+  btnPrev = b;
+
+  // Game over restart on button press
+  if (isGameOver && edgeDown) {
     // Reset game
     beeWX = 0.0f;
     beeWY = 0.0f;
@@ -1203,12 +1341,15 @@ void loop() {
     hasPollen = false;
     score = 0;
     initFlowers();
+    // Clear trail
+    for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
+    return; // Skip rest of frame
   }
 
-  // --- Button handling ---
-  bool b = joyPressedRaw();
-  bool edgeDown = (b && !btnPrev);
-  btnPrev = b;
+  // Don't process normal game input during game over
+  if (isGameOver) {
+    return;
+  }
 
   // "stick pushed" test for click => boost (if available)
   bool stickPushed = (fabsf(nx) > 0.20f || fabsf(ny) > 0.20f);
