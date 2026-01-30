@@ -78,6 +78,12 @@ static inline uint8_t clampu8(int v) {
   return (uint8_t)v;
 }
 
+static inline void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs) {
+  cameraShakeUntilMs = nowMs + durationMs;
+  cameraShakeDurationMs = durationMs;
+  cameraShakeMagnitude = magnitude;
+}
+
 // RGB565 helper
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
@@ -175,6 +181,7 @@ struct TrailParticle {
   uint32_t bornMs;
   uint8_t alive;
   uint8_t variant; // 0-2 for visual variety
+  float speedN;
 };
 static const int TRAIL_MAX = 24; // doubled for more impact
 static TrailParticle trail[TRAIL_MAX];
@@ -245,8 +252,14 @@ static bool hasPollen = false;
 static uint16_t score = 0;
 
 // Bee render center (screen-space)
-static inline int beeScreenCX() { return tft.width() / 2; }
-static inline int beeScreenCY() { return (tft.height() + HUD_H) / 2; } // center of playfield
+static float cameraZoom = 1.0f;
+static float cameraShakeX = 0.0f;
+static float cameraShakeY = 0.0f;
+static uint32_t cameraShakeUntilMs = 0;
+static uint32_t cameraShakeDurationMs = 0;
+static float cameraShakeMagnitude = 0.0f;
+static inline int beeScreenCX() { return tft.width() / 2 + (int)cameraShakeX; }
+static inline int beeScreenCY() { return (tft.height() + HUD_H) / 2 + (int)cameraShakeY; } // center of playfield
 
 static void initFlowerStyle(Flower &f) {
   // store petals as RGB table so we can derive a darker tint cheaply once
@@ -474,8 +487,17 @@ static bool soundBusy() {
 
 // -------------------- WORLD HELPERS --------------------
 static inline void worldToScreen(int32_t wx, int32_t wy, int &sx, int &sy) {
-  sx = beeScreenCX() + (int)(wx - (int32_t)beeWX);
-  sy = beeScreenCY() + (int)(wy - (int32_t)beeWY);
+  float dx = (float)wx - beeWX;
+  float dy = (float)wy - beeWY;
+  sx = beeScreenCX() + (int)(dx * cameraZoom);
+  sy = beeScreenCY() + (int)(dy * cameraZoom);
+}
+
+static inline void worldToScreenF(float wx, float wy, int &sx, int &sy) {
+  float dx = wx - beeWX;
+  float dy = wy - beeWY;
+  sx = beeScreenCX() + (int)(dx * cameraZoom);
+  sy = beeScreenCY() + (int)(dy * cameraZoom);
 }
 
 static inline uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt) {
@@ -527,12 +549,13 @@ static void drawBeeShadow(Adafruit_GFX &g, int x, int y) {
 }
 
 // Trail particle functions
-static void spawnTrailParticle(float wx, float wy, uint32_t nowMs) {
+static void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs) {
   trail[trailNextIdx].wx = wx;
   trail[trailNextIdx].wy = wy;
   trail[trailNextIdx].bornMs = nowMs;
   trail[trailNextIdx].alive = 1;
   trail[trailNextIdx].variant = (uint8_t)(xrnd() % 3);
+  trail[trailNextIdx].speedN = clampf(speedN, 0.0f, 1.0f);
   trailNextIdx = (trailNextIdx + 1) % TRAIL_MAX;
 }
 
@@ -554,17 +577,21 @@ static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) 
     if (age > TRAIL_LIFE_MS) continue;
 
     // Convert world to screen
-    int sx = beeScreenCX() + (int)(trail[i].wx - beeWX);
-    int sy = beeScreenCY() + (int)(trail[i].wy - beeWY);
+    int sx, sy;
+    worldToScreenF(trail[i].wx, trail[i].wy, sx, sy);
 
     // Fade out based on age
     float t = (float)age / (float)TRAIL_LIFE_MS;
     float alpha = 1.0f - t * t; // quadratic fade looks better
 
-    // Boost glow - bright yellow to orange gradient
-    uint8_t r = (uint8_t)(255 * alpha);
-    uint8_t g_val = (uint8_t)(220 * alpha);
-    uint8_t b = (uint8_t)(60 * alpha);
+    float speedT = trail[i].speedN;
+    uint8_t baseR = (uint8_t)(255 - (int)(115.0f * speedT));
+    uint8_t baseG = (uint8_t)(220 - (int)(120.0f * speedT));
+    uint8_t baseB = (uint8_t)(60 + (int)(195.0f * speedT));
+
+    uint8_t r = (uint8_t)(baseR * alpha);
+    uint8_t g_val = (uint8_t)(baseG * alpha);
+    uint8_t b = (uint8_t)(baseB * alpha);
 
     // Multi-layer glow for impact!
     if (alpha > 0.6f) {
@@ -677,13 +704,23 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
 
   // quick bloom pop on spawn
   uint32_t age = nowMs - bornMs;
-  if (age < 240) {
-    float t = 1.0f - (float)age / 240.0f;
-    int br = r + 6 + (int)(t * 4.0f);
+  if (age < 360) {
+    float t = 1.0f - (float)age / 360.0f;
+    int br = r + 6 + (int)(t * 8.0f);
     uint16_t bc = rgb565(255, 235, 200);
+    uint16_t bc2 = rgb565(255, 250, 230);
     g.drawCircle(x, y, br, bc);
+    g.drawCircle(x, y, br + 3, bc2);
     if ((age & 0x3u) == 0u) {
       g.drawCircle(x, y, br - 2, COL_WHITE);
+      g.drawCircle(x, y, br + 1, COL_POLLEN_HI);
+    }
+    if ((age & 0x7u) == 0u) {
+      int sparkR = br + 5;
+      g.drawPixel(x + sparkR, y, bc2);
+      g.drawPixel(x - sparkR, y, bc2);
+      g.drawPixel(x, y + sparkR, bc2);
+      g.drawPixel(x, y - sparkR, bc2);
     }
   }
 }
@@ -700,7 +737,7 @@ static void drawBoundaryZone(Adafruit_GFX &g, int ox, int oy) {
   if (distFromCenter > BOUNDARY_COMFORTABLE * 0.6f) {
     // Subtle boundary ring showing max joystick reach
     uint16_t boundaryColor = rgb565(50, 70, 90);
-    g.drawCircle(hiveX, hiveY, (int)BOUNDARY_COMFORTABLE, boundaryColor);
+    g.drawCircle(hiveX, hiveY, (int)(BOUNDARY_COMFORTABLE * cameraZoom), boundaryColor);
   }
 }
 
@@ -716,15 +753,15 @@ static void drawWorldGrid(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
   int sy1 = tileY + CANVAS_H - 1;
 
   // world rect
-  int32_t wx0 = (int32_t)beeWX + (sx0 - beeScreenCX());
-  int32_t wy0 = (int32_t)beeWY + (sy0 - beeScreenCY());
-  int32_t wx1 = (int32_t)beeWX + (sx1 - beeScreenCX());
-  int32_t wy1 = (int32_t)beeWY + (sy1 - beeScreenCY());
+  int32_t wx0 = (int32_t)(beeWX + (float)(sx0 - beeScreenCX()) / cameraZoom);
+  int32_t wy0 = (int32_t)(beeWY + (float)(sy0 - beeScreenCY()) / cameraZoom);
+  int32_t wx1 = (int32_t)(beeWX + (float)(sx1 - beeScreenCX()) / cameraZoom);
+  int32_t wy1 = (int32_t)(beeWY + (float)(sy1 - beeScreenCY()) / cameraZoom);
 
   // vertical lines
   int32_t gx0 = (int32_t)floorf((float)wx0 / (float)GRID2) * GRID2;
   for (int32_t gx = gx0; gx <= wx1; gx += GRID2) {
-    int sx = beeScreenCX() + (int)(gx - (int32_t)beeWX);
+    int sx = beeScreenCX() + (int)(((float)gx - beeWX) * cameraZoom);
     if (sx < sx0 || sx > sx1) continue;
     bool major = ((gx % GRID) == 0);
     uint16_t c = major ? COL_GRID : COL_GRID2;
@@ -734,7 +771,7 @@ static void drawWorldGrid(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
   // horizontal lines
   int32_t gy0 = (int32_t)floorf((float)wy0 / (float)GRID2) * GRID2;
   for (int32_t gy = gy0; gy <= wy1; gy += GRID2) {
-    int sy = beeScreenCY() + (int)(gy - (int32_t)beeWY);
+    int sy = beeScreenCY() + (int)(((float)gy - beeWY) * cameraZoom);
     if (sy < sy0 || sy > sy1) continue;
     bool major = ((gy % GRID) == 0);
     uint16_t c = major ? COL_GRID : COL_GRID2;
@@ -758,10 +795,10 @@ static void drawStarLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
   int sy1 = tileY + CANVAS_H - 1;
 
   // world rect for the layer
-  int32_t wx0 = (int32_t)camX + (sx0 - beeScreenCX());
-  int32_t wy0 = (int32_t)camY + (sy0 - beeScreenCY());
-  int32_t wx1 = (int32_t)camX + (sx1 - beeScreenCX());
-  int32_t wy1 = (int32_t)camY + (sy1 - beeScreenCY());
+  int32_t wx0 = (int32_t)(camX + (float)(sx0 - beeScreenCX()) / cameraZoom);
+  int32_t wy0 = (int32_t)(camY + (float)(sy0 - beeScreenCY()) / cameraZoom);
+  int32_t wx1 = (int32_t)(camX + (float)(sx1 - beeScreenCX()) / cameraZoom);
+  int32_t wy1 = (int32_t)(camY + (float)(sy1 - beeScreenCY()) / cameraZoom);
 
   int32_t cx0 = (int32_t)floorf((float)wx0 / (float)cell);
   int32_t cy0 = (int32_t)floorf((float)wy0 / (float)cell);
@@ -780,8 +817,8 @@ static void drawStarLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
       int32_t wx = cx * cell + px;
       int32_t wy = cy * cell + py;
 
-      int sx = beeScreenCX() + (int)(wx - (int32_t)camX);
-      int sy = beeScreenCY() + (int)(wy - (int32_t)camY);
+      int sx = beeScreenCX() + (int)(((float)wx - camX) * cameraZoom);
+      int sy = beeScreenCY() + (int)(((float)wy - camY) * cameraZoom);
 
       if (sx < sx0 || sx > sx1 || sy < sy0 || sy > sy1) continue;
 
@@ -809,10 +846,10 @@ static void drawNebulaLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int o
   int sx1 = tileX + CANVAS_W - 1;
   int sy1 = tileY + CANVAS_H - 1;
 
-  int32_t wx0 = (int32_t)camX + (sx0 - beeScreenCX());
-  int32_t wy0 = (int32_t)camY + (sy0 - beeScreenCY());
-  int32_t wx1 = (int32_t)camX + (sx1 - beeScreenCX());
-  int32_t wy1 = (int32_t)camY + (sy1 - beeScreenCY());
+  int32_t wx0 = (int32_t)(camX + (float)(sx0 - beeScreenCX()) / cameraZoom);
+  int32_t wy0 = (int32_t)(camY + (float)(sy0 - beeScreenCY()) / cameraZoom);
+  int32_t wx1 = (int32_t)(camX + (float)(sx1 - beeScreenCX()) / cameraZoom);
+  int32_t wy1 = (int32_t)(camY + (float)(sy1 - beeScreenCY()) / cameraZoom);
 
   int32_t cx0 = (int32_t)floorf((float)wx0 / (float)cell);
   int32_t cy0 = (int32_t)floorf((float)wy0 / (float)cell);
@@ -829,8 +866,8 @@ static void drawNebulaLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int o
       int32_t wx = cx * cell + px;
       int32_t wy = cy * cell + py;
 
-      int sx = beeScreenCX() + (int)(wx - (int32_t)camX);
-      int sy = beeScreenCY() + (int)(wy - (int32_t)camY);
+      int sx = beeScreenCX() + (int)(((float)wx - camX) * cameraZoom);
+      int sy = beeScreenCY() + (int)(((float)wy - camY) * cameraZoom);
       if (sx < sx0 || sx > sx1 || sy < sy0 || sy > sy1) continue;
 
       uint8_t r = clampu8(40 + (int)((h >> 12) & 0x1Fu));
@@ -1449,6 +1486,11 @@ void loop() {
 
   // Determine if boost is active
   bool boosting = (int32_t)(now - boostActiveUntilMs) < 0;
+  static bool wasBoosting = false;
+  if (boosting && !wasBoosting) {
+    triggerCameraShake(now, 6.5f, 180);
+  }
+  wasBoosting = boosting;
 
   // ---- SPRING-BASED MOVEMENT ----
   // Joystick maps to target position in world space (bounded exploration area)
@@ -1489,12 +1531,29 @@ void loop() {
     static uint32_t lastTrailMs = 0;
     if ((uint32_t)(now - lastTrailMs) > 20) {
       // Spawn 2 particles per frame for extra density
-      spawnTrailParticle(beeWX, beeWY, now);
-      spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, now); // slightly offset
+      spawnTrailParticle(beeWX, beeWY, spN, now);
+      spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, spN, now); // slightly offset
       lastTrailMs = now;
     }
   }
   updateTrailParticles(now);
+
+  // Camera zoom + shake response
+  float targetZoom = boosting ? 1.22f : 1.0f;
+  float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
+  cameraZoom += (targetZoom - cameraZoom) * zoomLerp;
+
+  if ((int32_t)(now - cameraShakeUntilMs) < 0 && cameraShakeDurationMs > 0) {
+    float t = (float)(cameraShakeUntilMs - now) / (float)cameraShakeDurationMs;
+    t = clampf(t, 0.0f, 1.0f);
+    float amp = cameraShakeMagnitude * t * t;
+    float phase = (float)now * 0.045f;
+    cameraShakeX = sinf(phase * 6.2f) * amp;
+    cameraShakeY = cosf(phase * 7.4f) * amp;
+  } else {
+    cameraShakeX = 0.0f;
+    cameraShakeY = 0.0f;
+  }
 
   // Survival timer countdown
   if (!isGameOver) {
