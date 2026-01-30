@@ -1313,11 +1313,11 @@ void loop() {
   const float damping = boosting ? 15.0f : 10.0f;
 
   // Spring force: F = k * (target - current) - damping * velocity
-  float ax = springK * (targetWX - beeWX) - damping * beeVX;
-  float ay = springK * (targetWY - beeWY) - damping * beeVY;
+  float forceX = springK * (targetWX - beeWX) - damping * beeVX;
+  float forceY = springK * (targetWY - beeWY) - damping * beeVY;
 
-  beeVX += ax * dt;
-  beeVY += ay * dt;
+  beeVX += forceX * dt;
+  beeVY += forceY * dt;
 
   // Integrate
   beeWX += beeVX * dt;
