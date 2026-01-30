@@ -72,6 +72,11 @@ static inline float clampf(float v, float lo, float hi) {
   if (v > hi) return hi;
   return v;
 }
+static inline uint8_t clampu8(int v) {
+  if (v < 0) return 0;
+  if (v > 255) return 255;
+  return (uint8_t)v;
+}
 
 // RGB565 helper
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
@@ -132,6 +137,7 @@ static inline uint32_t hash32(uint32_t x) {
 // -------------------- FLOWERS --------------------
 static const int FLOWER_N = 7;
 static Flower flowers[FLOWER_N];
+static uint32_t flowerBornMs[FLOWER_N];
 
 // -------------------- BELT HUD --------------------
 static const int BELT_ITEM_N = 10;
@@ -271,6 +277,7 @@ static void spawnFlowerAt(int i, int32_t wx, int32_t wy) {
   f.wx = wx;
   f.wy = wy;
   initFlowerStyle(f);
+  flowerBornMs[i] = millis();
 }
 
 static void spawnFlowerNearOrigin(int i) {
@@ -476,6 +483,28 @@ static inline uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt) {
 }
 
 // -------------------- DRAWING PRIMITIVES --------------------
+static void drawBoostAura(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
+  float t = (float)(nowMs % 900u) / 900.0f;
+  int r = 14 + (int)(4.0f * sinf(t * 6.2831853f));
+  uint16_t c1 = rgb565(255, 210, 60);
+  uint16_t c2 = rgb565(255, 240, 140);
+  g.drawCircle(x, y, r, c1);
+  g.drawCircle(x, y, r + 2, c2);
+  g.drawCircle(x, y, r - 2, c1);
+}
+
+static void drawPollenSparkles(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
+  if (!hasPollen) return;
+  uint32_t h = hash32((uint32_t)nowMs >> 4);
+  for (int i = 0; i < 6; i++) {
+    int dx = (int)((h >> (i * 5)) & 0x1Fu) - 15;
+    int dy = (int)((h >> (i * 5 + 2)) & 0x1Fu) - 15;
+    if ((dx * dx + dy * dy) > 160) continue;
+    uint16_t c = (i & 1) ? COL_POLLEN_HI : COL_WHITE;
+    if (((h >> (i * 3)) & 1u) == 0u) g.drawPixel(x + dx, y + dy, c);
+  }
+}
+
 static void drawBeeShadow(Adafruit_GFX &g, int x, int y) {
   int sy = y + 14;
   float s = 0.5f + 0.5f * sinf(wingPhase);
@@ -582,9 +611,13 @@ static void drawBee(Adafruit_GFX &g, int x, int y) {
   int flap = (int)(s * (2 + (int)(3 * wingSpeed)));
   int wH   = 4 + (int)(2 * (0.5f + 0.5f * s));
   int wW   = 7 + (int)(2 * wingSpeed);
+  uint8_t wr = clampu8(170 + (int)(55.0f * (0.5f + 0.5f * s)));
+  uint8_t wg = clampu8(215 + (int)(35.0f * (0.5f + 0.5f * s)));
+  uint8_t wb = 255;
+  uint16_t wingCol = rgb565(wr, wg, wb);
 
-  g.fillEllipse(x - 6, y - 9 + flap, wW, wH, COL_WING);
-  g.fillEllipse(x + 2, y - 10 - flap/2, wW, wH, COL_WING);
+  g.fillEllipse(x - 6, y - 9 + flap, wW, wH, wingCol);
+  g.fillEllipse(x + 2, y - 10 - flap/2, wW, wH, wingCol);
   g.drawEllipse(x - 6, y - 9 + flap, wW, wH, COL_WHITE);
   g.drawEllipse(x + 2, y - 10 - flap/2, wW, wH, COL_WHITE);
 
@@ -615,7 +648,7 @@ static void drawHive(Adafruit_GFX &g, int x, int y) {
   g.drawCircle(x, y,  2, COL_HIVE);
 }
 
-static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f) {
+static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t nowMs, uint32_t bornMs) {
   if (!f.alive) return;
   int r = (int)f.r;
 
@@ -641,6 +674,18 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f) {
 
   g.drawPixel(x - 1, y - 1, COL_POLLEN_HI);
   g.drawPixel(x - 2, y - 1, COL_WHITE);
+
+  // quick bloom pop on spawn
+  uint32_t age = nowMs - bornMs;
+  if (age < 240) {
+    float t = 1.0f - (float)age / 240.0f;
+    int br = r + 6 + (int)(t * 4.0f);
+    uint16_t bc = rgb565(255, 235, 200);
+    g.drawCircle(x, y, br, bc);
+    if ((age & 0x3u) == 0u) {
+      g.drawCircle(x, y, br - 2, COL_WHITE);
+    }
+  }
 }
 
 // -------------------- BACKGROUND --------------------
@@ -747,6 +792,56 @@ static void drawStarLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
       if (((h >> 20) & 0xFu) == 0u) {
         g.drawPixel(sx - 1 + ox, sy + oy, c);
         g.drawPixel(sx + 1 + ox, sy + oy, c);
+      }
+    }
+  }
+}
+
+static void drawNebulaLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, uint32_t nowMs) {
+  float driftX = sinf((float)nowMs * 0.00012f) * 22.0f;
+  float driftY = cosf((float)nowMs * 0.00010f) * 18.0f;
+  float camX = beeWX * 0.35f + driftX;
+  float camY = beeWY * 0.35f + driftY;
+  const int cell = 64;
+
+  int sx0 = tileX;
+  int sy0 = tileY;
+  int sx1 = tileX + CANVAS_W - 1;
+  int sy1 = tileY + CANVAS_H - 1;
+
+  int32_t wx0 = (int32_t)camX + (sx0 - beeScreenCX());
+  int32_t wy0 = (int32_t)camY + (sy0 - beeScreenCY());
+  int32_t wx1 = (int32_t)camX + (sx1 - beeScreenCX());
+  int32_t wy1 = (int32_t)camY + (sy1 - beeScreenCY());
+
+  int32_t cx0 = (int32_t)floorf((float)wx0 / (float)cell);
+  int32_t cy0 = (int32_t)floorf((float)wy0 / (float)cell);
+  int32_t cx1 = (int32_t)floorf((float)wx1 / (float)cell);
+  int32_t cy1 = (int32_t)floorf((float)wy1 / (float)cell);
+
+  for (int32_t cy = cy0; cy <= cy1; cy++) {
+    for (int32_t cx = cx0; cx <= cx1; cx++) {
+      uint32_t h = worldCellSeed(cx, cy, 0xD1B00Bu);
+      if ((h & 0x0Fu) != 0u) continue; // 1/16 cells
+
+      int px = (int)(h & 0x3Fu);
+      int py = (int)((h >> 6) & 0x3Fu);
+      int32_t wx = cx * cell + px;
+      int32_t wy = cy * cell + py;
+
+      int sx = beeScreenCX() + (int)(wx - (int32_t)camX);
+      int sy = beeScreenCY() + (int)(wy - (int32_t)camY);
+      if (sx < sx0 || sx > sx1 || sy < sy0 || sy > sy1) continue;
+
+      uint8_t r = clampu8(40 + (int)((h >> 12) & 0x1Fu));
+      uint8_t gcol = clampu8(40 + (int)((h >> 17) & 0x1Fu));
+      uint8_t b = clampu8(70 + (int)((h >> 22) & 0x3Fu));
+      uint16_t c = rgb565(r, gcol, b);
+
+      g.drawPixel(sx + ox, sy + oy, c);
+      if ((h & 0x100u) != 0u) {
+        g.drawPixel(sx + 1 + ox, sy + oy, c);
+        g.drawPixel(sx + ox, sy + 1 + oy, c);
       }
     }
   }
@@ -1015,16 +1110,31 @@ static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   float ux = dx / len;
   float uy = dy / len;
 
-  // Ping ring
-  int r0 = 16 + (int)(t * 22.0f);
+  // Ping rings
+  int r0 = 14 + (int)(t * 26.0f);
   uint16_t rc = radarToHive ? COL_HIVE : COL_YEL;
   g.drawCircle(cx, cy, r0, rc);
   g.drawCircle(cx, cy, r0 + 4, COL_WHITE);
+  if (t > 0.35f) {
+    int r1 = 10 + (int)((t - 0.35f) * 30.0f);
+    g.drawCircle(cx, cy, r1, COL_UI_DIM);
+  }
 
-  // Arrow
-  int ax = cx + (int)(ux * 34.0f);
-  int ay = cy + (int)(uy * 34.0f);
-  g.drawLine(cx, cy, ax, ay, COL_WHITE);
+  // Dashed vector + distance ticks
+  int ax = cx + (int)(ux * 36.0f);
+  int ay = cy + (int)(uy * 36.0f);
+  for (int i = 6; i < 36; i += 6) {
+    int sx = cx + (int)(ux * (float)i);
+    int sy = cy + (int)(uy * (float)i);
+    g.drawPixel(sx, sy, COL_WHITE);
+  }
+  for (int i = 12; i <= 36; i += 8) {
+    int tx = cx + (int)(ux * (float)i);
+    int ty = cy + (int)(uy * (float)i);
+    int px = (int)(-uy * 2.0f);
+    int py = (int)(ux * 2.0f);
+    g.drawLine(tx - px, ty - py, tx + px, ty + py, COL_UI_DIM);
+  }
 
   // Arrow head
   float px = -uy;
@@ -1135,7 +1245,22 @@ static void tryStoreAtHive(uint32_t nowMs) {
 
     // Reset survival timer on successful delivery!
     survivalTimeLeft = SURVIVAL_TIME_MAX;
+
   }
+}
+
+static bool anyTrailAlive() {
+  for (int i = 0; i < TRAIL_MAX; i++) {
+    if (trail[i].alive) return true;
+  }
+  return false;
+}
+
+static bool anyBeltAlive() {
+  for (int i = 0; i < BELT_ITEM_N; i++) {
+    if (beltItems[i].alive) return true;
+  }
+  return false;
 }
 
 // -------------------- RENDER FRAME --------------------
@@ -1162,6 +1287,7 @@ static void renderFrame(uint32_t nowMs) {
       // background layers
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.25f, 48,  COL_STAR2, COL_STAR3, 0xA11CEu);
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.55f, 36,  COL_STAR,  COL_STAR2, 0xBEEFu);
+      drawNebulaLayer(canvas, tileX, tileY, ox, oy, nowMs);
       drawWorldGrid(canvas, tileX, tileY, ox, oy);
       drawBoundaryZone(canvas, ox, oy);
       drawScreenAnchor(canvas, ox, oy, nowMs);
@@ -1177,7 +1303,7 @@ static void renderFrame(uint32_t nowMs) {
         int sx, sy;
         worldToScreen(flowers[i].wx, flowers[i].wy, sx, sy);
         if (sx < -30 || sx > tft.width() + 30 || sy < HUD_H - 30 || sy > tft.height() + 30) continue;
-        drawFlower(canvas, sx + ox, sy + oy, flowers[i]);
+        drawFlower(canvas, sx + ox, sy + oy, flowers[i], nowMs, flowerBornMs[i]);
       }
 
       // boost trail particles (behind bee)
@@ -1186,8 +1312,13 @@ static void renderFrame(uint32_t nowMs) {
       // bee shadow + bee (always on screen)
       int bcX = beeScreenCX();
       int bcY = beeScreenCY();
-      drawBeeShadow(canvas, bcX + ox, bcY + oy);
-      drawBee(canvas, bcX + ox, bcY + oy);
+      int bob = (int)(sinf((float)nowMs * 0.008f) * 2.0f);
+      if ((int32_t)(nowMs - boostActiveUntilMs) < 0) {
+        drawBoostAura(canvas, bcX + ox, bcY + oy + bob, nowMs);
+      }
+      drawBeeShadow(canvas, bcX + ox, bcY + oy + bob);
+      drawBee(canvas, bcX + ox, bcY + oy + bob);
+      drawPollenSparkles(canvas, bcX + ox, bcY + oy + bob, nowMs);
 
       // radar overlay (screen-space)
       drawRadarOverlay(canvas, ox, oy, nowMs);
@@ -1318,7 +1449,6 @@ void loop() {
 
   // Determine if boost is active
   bool boosting = (int32_t)(now - boostActiveUntilMs) < 0;
-  bool boostCD  = (int32_t)(boostCooldownUntilMs - now) > 0;
 
   // ---- SPRING-BASED MOVEMENT ----
   // Joystick maps to target position in world space (bounded exploration area)
@@ -1405,34 +1535,11 @@ void loop() {
   // But DO continue to render!
   if (!isGameOver) {
 
-    // "stick pushed" test for click => boost (if available)
-    bool stickPushed = (fabsf(nx) > 0.20f || fabsf(ny) > 0.20f);
-
     if (edgeDown) {
       // Click always gives some percussive feedback.
       if (!soundBusy()) startSound(SND_CLICK, now);
-
-      if (stickPushed && boostCharge > 0 && !boostCD) {
-        // Trigger boost
-        boostCharge = 0;
-        boostActiveUntilMs = now + BOOST_DURATION_MANUAL;
-        boostCooldownUntilMs = now + BOOST_COOLDOWN_MANUAL;
-
-        // impulse in current direction
-        float dirX = nx;
-        float dirY = ny;
-        float dlen = sqrtf(dirX*dirX + dirY*dirY);
-        if (dlen < 0.001f) { dirX = 1.0f; dirY = 0.0f; dlen = 1.0f; }
-        dirX /= dlen; dirY /= dlen;
-        beeVX += dirX * BOOST_IMPULSE;
-        beeVY += dirY * BOOST_IMPULSE;
-
-        // also do a radar ping toward the current target (feels good)
-        beginRadarPing(now);
-      } else {
-        // Radar ping
-        beginRadarPing(now);
-      }
+      // Radar ping
+      beginRadarPing(now);
     }
 
     // Interactions
@@ -1444,6 +1551,8 @@ void loop() {
     if (!soundBusy()) {
       if (wingSpeed > 0.08f) {
         int freq = 90 + (int)(wingSpeed * 360.0f);
+        int vib = (int)(sinf((float)now * 0.018f) * (6.0f + wingSpeed * 12.0f));
+        freq += vib;
         freq = clampi(freq, 80, 520);
         tone(PIN_BUZZ, freq);
       } else {
@@ -1455,7 +1564,10 @@ void loop() {
 
   // Render at a stable cadence
   static uint32_t lastRenderMs = 0;
-  if ((uint32_t)(now - lastRenderMs) >= 40) { // ~25 fps
+  uint32_t renderInterval = 40;
+  bool idle = !isGameOver && !radarActive && !boosting && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive();
+  if (idle) renderInterval = 80; // ease CPU/GPU when calm
+  if ((uint32_t)(now - lastRenderMs) >= renderInterval) {
     lastRenderMs = now;
     renderFrame(now);
   }
