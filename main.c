@@ -35,6 +35,32 @@ static const int PIN_BUZZ = 15;   // GP15 (phys 20)
 
 Adafruit_ST7789 tft(&SPI, PIN_CS, PIN_DC, PIN_RST);
 
+// -------------------- TYPE DEFINITIONS (must come before any functions for Arduino) --------------------
+// FLOWERS
+struct Flower {
+  int32_t wx, wy;
+  uint8_t alive;
+  uint8_t r;
+  uint16_t petal;
+  uint16_t petalLo;
+  uint16_t center;
+};
+
+// BELT HUD
+struct BeltItem {
+  uint32_t bornMs;
+  uint8_t alive;
+};
+
+// SOUND SCHEDULER
+enum SndMode : uint8_t {
+  SND_IDLE = 0,
+  SND_CLICK,
+  SND_RADAR,
+  SND_POLLEN_CHIRP,
+  SND_POWERUP,
+};
+
 // -------------------- UTIL --------------------
 static inline int clampi(int v, int lo, int hi) {
   if (v < lo) return lo;
@@ -104,35 +130,15 @@ static inline uint32_t hash32(uint32_t x) {
 }
 
 // -------------------- FLOWERS --------------------
-struct Flower {
-  int32_t wx, wy;
-  uint8_t alive;
-  uint8_t r;
-  uint16_t petal;
-  uint16_t petalLo;
-  uint16_t center;
-};
-
 static const int FLOWER_N = 7;
 static Flower flowers[FLOWER_N];
 
 // -------------------- BELT HUD --------------------
-struct BeltItem {
-  uint32_t bornMs;
-  uint8_t alive;
-};
 static const int BELT_ITEM_N = 10;
 static BeltItem beltItems[BELT_ITEM_N];
 static const uint32_t BELT_LIFE_MS = 14000;
 
 // -------------------- SOUND SCHEDULER --------------------
-enum SndMode : uint8_t {
-  SND_IDLE = 0,
-  SND_CLICK,
-  SND_RADAR,
-  SND_POLLEN_CHIRP,
-  SND_POWERUP,
-};
 static SndMode sndMode = SND_IDLE;
 static uint8_t sndStep = 0;
 static uint32_t sndNextMs = 0;
