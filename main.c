@@ -184,6 +184,23 @@ static uint32_t gameOverMs = 0;
 // Spring-based exploration area - joystick maps to target within this radius
 static const float BOUNDARY_COMFORTABLE = 180.0f; // max exploration radius from hive
 
+// -------------------- MOVEMENT PHYSICS --------------------
+// Spring constants for smooth motion
+static const float SPRING_K_NORMAL = 40.0f;       // spring stiffness (normal)
+static const float SPRING_K_BOOST = 60.0f;        // spring stiffness (boosting)
+static const float DAMPING_NORMAL = 10.0f;        // damping coefficient (normal)
+static const float DAMPING_BOOST = 15.0f;         // damping coefficient (boosting)
+
+// Boost mechanics
+static const float BOOST_IMPULSE = 150.0f;        // velocity boost on manual trigger (was 220)
+static const uint32_t BOOST_DURATION_AUTO = 500;  // auto-boost duration on flower pickup (ms)
+static const uint32_t BOOST_DURATION_MANUAL = 700; // manual boost duration (ms)
+static const uint32_t BOOST_COOLDOWN_AUTO = 5200; // cooldown after auto-boost (ms)
+static const uint32_t BOOST_COOLDOWN_MANUAL = 3500; // cooldown after manual boost (ms)
+
+// Wing animation
+static const float WING_SPEED_DIVISOR = 520.0f;   // for normalizing velocity to wing speed
+
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
 static int readJoyY() { return analogRead(PIN_JOY_VRY); } // 0..1023
@@ -1089,8 +1106,8 @@ static void tryCollectPollen(uint32_t nowMs) {
       spawnFlowerElsewhere(i);
 
       // Auto-boost on flower pickup!
-      boostActiveUntilMs = nowMs + 500;  // 0.5 second boost
-      boostCooldownUntilMs = nowMs + 1200; // 1.2 second cooldown
+      boostActiveUntilMs = nowMs + BOOST_DURATION_AUTO;
+      boostCooldownUntilMs = nowMs + BOOST_COOLDOWN_AUTO;
 
       // chirp
       if (!soundBusy()) startSound(SND_POLLEN_CHIRP, nowMs);
@@ -1309,8 +1326,8 @@ void loop() {
   if (dy == 0) targetWY = 0.0f;
 
   // Spring constants (higher = more responsive, boost increases responsiveness)
-  const float springK = boosting ? 60.0f : 40.0f;
-  const float damping = boosting ? 15.0f : 10.0f;
+  const float springK = boosting ? SPRING_K_BOOST : SPRING_K_NORMAL;
+  const float damping = boosting ? DAMPING_BOOST : DAMPING_NORMAL;
 
   // Spring force: F = k * (target - current) - damping * velocity
   float forceX = springK * (targetWX - beeWX) - damping * beeVX;
@@ -1325,7 +1342,7 @@ void loop() {
 
   // Wing animation driven by speed
   float sp = fabsf(beeVX) + fabsf(beeVY);
-  float spN = clampf(sp / 520.0f, 0.0f, 1.0f);
+  float spN = clampf(sp / WING_SPEED_DIVISOR, 0.0f, 1.0f);
   wingSpeed = spN;
   float hz = 3.0f + 14.0f * wingSpeed;
   wingPhase += 2.0f * 3.1415926f * hz * dt;
@@ -1393,8 +1410,8 @@ void loop() {
       if (stickPushed && boostCharge > 0 && !boostCD) {
         // Trigger boost
         boostCharge = 0;
-        boostActiveUntilMs = now + 700;
-        boostCooldownUntilMs = now + 3500;
+        boostActiveUntilMs = now + BOOST_DURATION_MANUAL;
+        boostCooldownUntilMs = now + BOOST_COOLDOWN_MANUAL;
 
         // impulse in current direction
         float dirX = nx;
@@ -1402,8 +1419,8 @@ void loop() {
         float dlen = sqrtf(dirX*dirX + dirY*dirY);
         if (dlen < 0.001f) { dirX = 1.0f; dirY = 0.0f; dlen = 1.0f; }
         dirX /= dlen; dirY /= dlen;
-        beeVX += dirX * 220.0f;
-        beeVY += dirY * 220.0f;
+        beeVX += dirX * BOOST_IMPULSE;
+        beeVY += dirY * BOOST_IMPULSE;
 
         // also do a radar ping toward the current target (feels good)
         beginRadarPing(now);
