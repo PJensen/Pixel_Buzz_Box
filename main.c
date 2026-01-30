@@ -115,6 +115,14 @@ static bool pollenChirpPending = false;
 static uint8_t pollenChirpStep = 0;
 static uint32_t pollenChirpNextMs = 0;
 
+// ---- flower respawn + ding ----
+static bool flowerRespawnActive = false;
+static uint8_t flowerRespawnRemaining = 0;
+static uint32_t flowerRespawnNextMs = 0;
+static uint8_t flowerDingQueue = 0;
+static bool flowerDingActive = false;
+static uint32_t flowerDingUntilMs = 0;
+
 // RNG (xorshift32)
 static uint32_t rngState = 0xA5A5F00Du;
 static inline uint32_t xrnd() {
@@ -588,6 +596,16 @@ static void initFlowers() {
   }
 }
 
+static bool spawnNextDeadFlower() {
+  for (int i = 0; i < FLOWER_N; i++) {
+    if (!flowers[i].alive) {
+      spawnFlower(i);
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool allFlowersGone() {
   for (int i = 0; i < FLOWER_N; i++) if (flowers[i].alive) return false;
   return true;
@@ -605,17 +623,17 @@ static void updatePollenChirp(uint32_t nowMs) {
 
   switch (pollenChirpStep) {
     case 0:
-      tone(PIN_BUZZ, 620, 60);
+      tone(PIN_BUZZ, 720, 60);
       pollenChirpNextMs = nowMs + 70;
       pollenChirpStep++;
       break;
     case 1:
-      tone(PIN_BUZZ, 760, 60);
+      tone(PIN_BUZZ, 880, 60);
       pollenChirpNextMs = nowMs + 70;
       pollenChirpStep++;
       break;
     case 2:
-      tone(PIN_BUZZ, 520, 80);
+      tone(PIN_BUZZ, 620, 80);
       pollenChirpNextMs = nowMs + 90;
       pollenChirpStep++;
       break;
@@ -623,6 +641,37 @@ static void updatePollenChirp(uint32_t nowMs) {
       pollenChirpActive = false;
       noTone(PIN_BUZZ);
       break;
+  }
+}
+
+static void startFlowerDing(uint32_t nowMs) {
+  flowerDingActive = true;
+  flowerDingUntilMs = nowMs + 120;
+  tone(PIN_BUZZ, 980, 100);
+}
+
+static void updateFlowerDing(uint32_t nowMs) {
+  if (!flowerDingActive) return;
+  if ((int32_t)(nowMs - flowerDingUntilMs) >= 0) {
+    flowerDingActive = false;
+    noTone(PIN_BUZZ);
+  }
+}
+
+static void updateFlowerRespawn(uint32_t nowMs) {
+  if (!flowerRespawnActive) return;
+  if ((int32_t)(nowMs - flowerRespawnNextMs) < 0) return;
+
+  if (flowerRespawnRemaining > 0 && spawnNextDeadFlower()) {
+    flowerRespawnRemaining--;
+    flowerDingQueue++;
+    fullRepaint(nowMs);
+  }
+
+  if (flowerRespawnRemaining == 0) {
+    flowerRespawnActive = false;
+  } else {
+    flowerRespawnNextMs = nowMs + 260;
   }
 }
 
@@ -667,8 +716,9 @@ static void tryStoreAtHive(int bx, int by, uint32_t nowMs) {
     drawHUD();
 
     if (allFlowersGone()) {
-      initFlowers();
-      fullRepaint(nowMs);
+      flowerRespawnActive = true;
+      flowerRespawnRemaining = FLOWER_N;
+      flowerRespawnNextMs = nowMs + 200;
     }
   }
 }
@@ -711,6 +761,13 @@ void setup() {
 
   beeX = tft.width() * 0.5f;
   beeY = (tft.height() + HUD_H) * 0.5f;
+
+  flowerRespawnActive = false;
+  flowerRespawnRemaining = 0;
+  flowerRespawnNextMs = 0;
+  flowerDingQueue = 0;
+  flowerDingActive = false;
+  flowerDingUntilMs = 0;
 
   fullRepaint(millis());
 }
@@ -811,7 +868,7 @@ void loop() {
   if ((uint32_t)(now - lastBuzzMs) >= 40) { // ~25 Hz
     lastBuzzMs = now;
 
-    if (!pollenChirpActive) {
+    if (!pollenChirpActive && !flowerDingActive) {
       if (wingSpeed > 0.08f) {
         int freq = 90 + (int)(wingSpeed * 360.0f); // ~120..450 Hz
         if (freq < 80)  freq = 80;
@@ -847,6 +904,12 @@ void loop() {
   }
   tryStoreAtHive(bx, by, now);
   updatePollenChirp(now);
+  updateFlowerDing(now);
+  if (!pollenChirpActive && !flowerDingActive && flowerDingQueue > 0) {
+    flowerDingQueue--;
+    startFlowerDing(now);
+  }
+  updateFlowerRespawn(now);
 
   // dirty rect redraw only when needed
   static int lastX = -9999, lastY = -9999;
