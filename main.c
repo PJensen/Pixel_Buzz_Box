@@ -186,10 +186,10 @@ static const float BOUNDARY_COMFORTABLE = 180.0f; // max exploration radius from
 
 // -------------------- MOVEMENT PHYSICS --------------------
 // Spring constants for smooth motion
-static const float SPRING_K_NORMAL = 40.0f;       // spring stiffness (normal)
-static const float SPRING_K_BOOST = 60.0f;        // spring stiffness (boosting)
-static const float DAMPING_NORMAL = 10.0f;        // damping coefficient (normal)
-static const float DAMPING_BOOST = 15.0f;         // damping coefficient (boosting)
+static const float SPRING_K_NORMAL = 32.0f;       // spring stiffness (normal)
+static const float SPRING_K_BOOST = 48.0f;        // spring stiffness (boosting)
+static const float DAMPING_NORMAL = 12.0f;        // damping coefficient (normal)
+static const float DAMPING_BOOST = 16.0f;         // damping coefficient (boosting)
 
 // Boost mechanics
 static const float BOOST_IMPULSE = 150.0f;        // velocity boost on manual trigger (was 220)
@@ -932,7 +932,7 @@ static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy) {
 // -------------------- GAME OVER SCREEN --------------------
 static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
   // Center panel for game over
-  int panelW = 180;
+  int panelW = 200;
   int panelH = 100;
   int panelX = (tft.width() - panelW) / 2;
   int panelY = (tft.height() - panelH) / 2 - 20;
