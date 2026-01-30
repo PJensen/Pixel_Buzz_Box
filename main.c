@@ -1323,18 +1323,20 @@ void loop() {
   beeVX += (desVX - beeVX) * k;
   beeVY += (desVY - beeVY) * k;
 
-  // Simple gentle gravity toward hive (world origin)
-  // Constant gentle pull to help navigation back to center
+  // Gentle gravity toward hive - only when far from center
+  // This is a HELPER, not forced motion - bee can rest peacefully near hive
   if (!isGameOver) {
     float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
-    if (distToHive > 1.0f) {
-      // Simple attractor: gentle constant pull toward center
-      // Direction normalized, then scaled by constant strength
+
+    // Only apply gravity when beyond comfortable play area (150 pixels)
+    const float GRAVITY_DEADBAND = 150.0f;
+    if (distToHive > GRAVITY_DEADBAND) {
+      // Gentle nudge back toward center
       float dirX = -beeWX / distToHive;  // unit vector toward center
       float dirY = -beeWY / distToHive;
 
-      // Gentle constant force (tunable - currently ~50 world units/s^2)
-      float gravityForce = 50.0f;
+      // Weak force - just a gentle reminder, not a prison
+      float gravityForce = 15.0f;
 
       beeVX += dirX * gravityForce * dt;
       beeVY += dirY * gravityForce * dt;
