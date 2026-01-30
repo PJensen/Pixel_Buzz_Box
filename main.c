@@ -168,8 +168,9 @@ struct TrailParticle {
   float wx, wy;
   uint32_t bornMs;
   uint8_t alive;
+  uint8_t variant; // 0-2 for visual variety
 };
-static const int TRAIL_MAX = 12;
+static const int TRAIL_MAX = 24; // doubled for more impact
 static TrailParticle trail[TRAIL_MAX];
 static int trailNextIdx = 0;
 
@@ -180,8 +181,13 @@ static bool isGameOver = false;
 static uint32_t gameOverMs = 0;
 
 // -------------------- WORLD CONSTRAINTS --------------------
-static const float WORLD_RADIUS_MAX = 480.0f; // 2x screen height
-static const float GRAVITY_STRENGTH = 5.0f;   // very strong pull toward hive (joystick is sticky)
+static const float GRAVITY_BASE_STRENGTH = 0.8f;   // base gravity multiplier
+static const float GRAVITY_DISTANCE_POWER = 1.5f;  // how much gravity increases with distance (1.5 = square root scaling)
+static const float GRAVITY_REFERENCE_DIST = 100.0f; // reference distance for scaling
+// Gravity zones for visual feedback
+static const float GRAVITY_ZONE_SAFE = 150.0f;   // green zone - easy movement
+static const float GRAVITY_ZONE_WARN = 300.0f;   // yellow zone - getting harder
+static const float GRAVITY_ZONE_DANGER = 450.0f; // red zone - very hard to escape
 
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
@@ -285,18 +291,18 @@ static void spawnFlowerNearOrigin(int i) {
 }
 
 static void spawnFlowerElsewhere(int i) {
-  // Respawn away from current bee position but within world radius.
-  // Try to place offscreen but reachable.
+  // Respawn away from current bee position but within reasonable range.
+  // Try to place offscreen but reachable (within warning zone).
   for (int tries = 0; tries < 80; tries++) {
-    // Random position within world radius
-    int32_t r = (int32_t)irand(60, (int)WORLD_RADIUS_MAX - 40);
+    // Random position within warning zone (still reachable)
+    int32_t r = (int32_t)irand(60, (int)GRAVITY_ZONE_WARN - 40);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
     int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
-    // Must be within world radius
-    if ((wx*wx + wy*wy) > (int32_t)(WORLD_RADIUS_MAX * WORLD_RADIUS_MAX)) continue;
+    // Keep within warning zone
+    if ((wx*wx + wy*wy) > (int32_t)(GRAVITY_ZONE_WARN * GRAVITY_ZONE_WARN)) continue;
 
     // Try to keep away from bee (so radar is useful)
     int32_t dx_bee = wx - (int32_t)beeWX;
@@ -486,6 +492,7 @@ static void spawnTrailParticle(float wx, float wy, uint32_t nowMs) {
   trail[trailNextIdx].wy = wy;
   trail[trailNextIdx].bornMs = nowMs;
   trail[trailNextIdx].alive = 1;
+  trail[trailNextIdx].variant = (uint8_t)(xrnd() % 3);
   trailNextIdx = (trailNextIdx + 1) % TRAIL_MAX;
 }
 
@@ -500,7 +507,7 @@ static void updateTrailParticles(uint32_t nowMs) {
 }
 
 static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
-  const uint32_t TRAIL_LIFE_MS = 250;
+  const uint32_t TRAIL_LIFE_MS = 300; // slightly longer life
   for (int i = 0; i < TRAIL_MAX; i++) {
     if (!trail[i].alive) continue;
     uint32_t age = nowMs - trail[i].bornMs;
@@ -512,17 +519,47 @@ static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) 
 
     // Fade out based on age
     float t = (float)age / (float)TRAIL_LIFE_MS;
-    float alpha = 1.0f - t;
+    float alpha = 1.0f - t * t; // quadratic fade looks better
 
-    // Draw particle (yellow/orange glow)
-    uint16_t c1 = rgb565((uint8_t)(255 * alpha), (uint8_t)(200 * alpha), (uint8_t)(80 * alpha));
-    uint16_t c2 = rgb565((uint8_t)(255 * alpha * 0.6f), (uint8_t)(160 * alpha * 0.6f), (uint8_t)(40 * alpha * 0.6f));
+    // Boost glow - bright yellow to orange gradient
+    uint8_t r = (uint8_t)(255 * alpha);
+    uint8_t g_val = (uint8_t)(220 * alpha);
+    uint8_t b = (uint8_t)(60 * alpha);
 
-    // Draw particle as small circle
-    if (alpha > 0.5f) {
-      g.fillCircle(sx + ox, sy + oy, 2, c1);
+    // Multi-layer glow for impact!
+    if (alpha > 0.6f) {
+      // Outer glow (larger, dimmer)
+      uint16_t outerGlow = rgb565(r / 3, g_val / 3, b / 3);
+      g.fillCircle(sx + ox, sy + oy, 5, outerGlow);
+
+      // Mid glow
+      uint16_t midGlow = rgb565(r / 2, g_val / 2, b / 2);
+      g.fillCircle(sx + ox, sy + oy, 3, midGlow);
+
+      // Core (bright)
+      uint16_t core = rgb565(r, g_val, b);
+      g.fillCircle(sx + ox, sy + oy, 2, core);
+
+      // Sparkle variants
+      if (trail[i].variant == 0 && alpha > 0.8f) {
+        // Cross sparkle
+        uint16_t sparkle = rgb565(255, 255, 200);
+        g.drawPixel(sx - 3 + ox, sy + oy, sparkle);
+        g.drawPixel(sx + 3 + ox, sy + oy, sparkle);
+        g.drawPixel(sx + ox, sy - 3 + oy, sparkle);
+        g.drawPixel(sx + ox, sy + 3 + oy, sparkle);
+      }
+    } else if (alpha > 0.3f) {
+      // Mid-fade: smaller but still visible
+      uint16_t midGlow = rgb565(r / 2, g_val / 2, b / 2);
+      g.fillCircle(sx + ox, sy + oy, 3, midGlow);
+
+      uint16_t core = rgb565(r, g_val, b);
+      g.fillCircle(sx + ox, sy + oy, 1, core);
     } else {
-      g.drawPixel(sx + ox, sy + oy, c2);
+      // Fading out: just a dot
+      uint16_t dim = rgb565(r, g_val, b);
+      g.drawPixel(sx + ox, sy + oy, dim);
     }
   }
 }
@@ -596,6 +633,43 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f) {
 }
 
 // -------------------- BACKGROUND --------------------
+static void drawGravityZones(Adafruit_GFX &g, int ox, int oy) {
+  // Draw visual indicator of gravity strength zones
+  // Centered on hive (screen center)
+  int hiveX = beeScreenCX() + ox;
+  int hiveY = beeScreenCY() + oy;
+
+  // Current bee distance from hive
+  float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
+
+  // Draw zones as faint circles
+  // Only show zones when bee is getting far
+  if (distToHive > GRAVITY_ZONE_SAFE * 0.7f) {
+    // Safe zone (green tint)
+    uint16_t safeColor = rgb565(20, 50, 30);
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_SAFE, safeColor);
+  }
+
+  if (distToHive > GRAVITY_ZONE_WARN * 0.7f) {
+    // Warning zone (yellow tint)
+    uint16_t warnColor = rgb565(60, 50, 10);
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN, warnColor);
+    // Double ring for emphasis
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN + 2, warnColor);
+  }
+
+  if (distToHive > GRAVITY_ZONE_DANGER * 0.7f) {
+    // Danger zone (red tint)
+    uint16_t dangerColor = rgb565(80, 20, 20);
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER, dangerColor);
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER + 2, dangerColor);
+    // Pulsing effect
+    if ((millis() % 1000) < 500) {
+      g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER + 4, dangerColor);
+    }
+  }
+}
+
 static void drawWorldGrid(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy) {
   // Subtle world-space grid lines (anchor + motion). Spacing in world units.
   const int GRID = 160;
@@ -1095,6 +1169,7 @@ static void renderFrame(uint32_t nowMs) {
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.25f, 48,  COL_STAR2, COL_STAR3, 0xA11CEu);
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.55f, 36,  COL_STAR,  COL_STAR2, 0xBEEFu);
       drawWorldGrid(canvas, tileX, tileY, ox, oy);
+      drawGravityZones(canvas, ox, oy);
       drawScreenAnchor(canvas, ox, oy, nowMs);
 
       // hive (only if near screen)
@@ -1269,12 +1344,19 @@ void loop() {
   beeVX += (desVX - beeVX) * k;
   beeVY += (desVY - beeVY) * k;
 
-  // Gentle gravity toward hive (world origin)
+  // Distance-scaled gravity toward hive (world origin)
+  // Pulls harder the further you are - no hard boundary!
   if (!isGameOver) {
     float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
     if (distToHive > 1.0f) {
-      float gravX = -beeWX / distToHive * GRAVITY_STRENGTH * dt * 100.0f;
-      float gravY = -beeWY / distToHive * GRAVITY_STRENGTH * dt * 100.0f;
+      // Calculate gravity strength based on distance
+      // force = base * (distance / reference)^power
+      float distScale = distToHive / GRAVITY_REFERENCE_DIST;
+      float gravityStrength = GRAVITY_BASE_STRENGTH * powf(distScale, GRAVITY_DISTANCE_POWER);
+
+      // Apply gravity force
+      float gravX = -beeWX / distToHive * gravityStrength * dt * 100.0f;
+      float gravY = -beeWY / distToHive * gravityStrength * dt * 100.0f;
       beeVX += gravX;
       beeVY += gravY;
     }
@@ -1284,17 +1366,6 @@ void loop() {
   beeWX += beeVX * dt;
   beeWY += beeVY * dt;
 
-  // Constrain to world radius
-  float distFromOrigin = sqrtf(beeWX * beeWX + beeWY * beeWY);
-  if (distFromOrigin > WORLD_RADIUS_MAX) {
-    float scale = WORLD_RADIUS_MAX / distFromOrigin;
-    beeWX *= scale;
-    beeWY *= scale;
-    // Stop outward velocity component
-    beeVX *= 0.5f;
-    beeVY *= 0.5f;
-  }
-
   // Wing animation driven by speed
   float sp = fabsf(beeVX) + fabsf(beeVY);
   float spN = clampf(sp / 520.0f, 0.0f, 1.0f);
@@ -1303,12 +1374,14 @@ void loop() {
   wingPhase += 2.0f * 3.1415926f * hz * dt;
   if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
 
-  // Boost trail VFX
-  if (boosting && wingSpeed > 0.3f) {
-    // Spawn trail particles every ~30ms when moving fast
+  // Boost trail VFX - much more prominent!
+  if (boosting && wingSpeed > 0.2f) {
+    // Spawn trail particles every ~20ms for denser trail
     static uint32_t lastTrailMs = 0;
-    if ((uint32_t)(now - lastTrailMs) > 30) {
+    if ((uint32_t)(now - lastTrailMs) > 20) {
+      // Spawn 2 particles per frame for extra density
       spawnTrailParticle(beeWX, beeWY, now);
+      spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, now); // slightly offset
       lastTrailMs = now;
     }
   }
@@ -1321,6 +1394,9 @@ void loop() {
       survivalTimeLeft = 0.0f;
       isGameOver = true;
       gameOverMs = now;
+      // Stop all sounds immediately!
+      noTone(PIN_BUZZ);
+      sndMode = SND_IDLE;
     }
   }
 
@@ -1387,16 +1463,19 @@ void loop() {
   tryStoreAtHive(now);
 
   // Sound: ambient wing buzz (only when no event sounds active) - stops when bee stops!
-  if (!soundBusy()) {
-    if (wingSpeed > 0.08f) {
-      int freq = 90 + (int)(wingSpeed * 360.0f);
-      freq = clampi(freq, 80, 520);
-      tone(PIN_BUZZ, freq);
-    } else {
-      noTone(PIN_BUZZ);
+  // Skip all sound during game over
+  if (!isGameOver) {
+    if (!soundBusy()) {
+      if (wingSpeed > 0.08f) {
+        int freq = 90 + (int)(wingSpeed * 360.0f);
+        freq = clampi(freq, 80, 520);
+        tone(PIN_BUZZ, freq);
+      } else {
+        noTone(PIN_BUZZ);
+      }
     }
+    updateSound(now);
   }
-  updateSound(now);
 
   // Render at a stable cadence
   static uint32_t lastRenderMs = 0;
