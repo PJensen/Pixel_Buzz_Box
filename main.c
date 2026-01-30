@@ -171,7 +171,7 @@ static uint32_t gameOverMs = 0;
 
 // -------------------- WORLD CONSTRAINTS --------------------
 static const float WORLD_RADIUS_MAX = 480.0f; // 2x screen height
-static const float GRAVITY_STRENGTH = 0.4f;   // gentle pull toward hive
+static const float GRAVITY_STRENGTH = 1.8f;   // strong pull toward hive (helps 1-year-old)
 
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
@@ -708,11 +708,11 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
 
 static void drawBeltHUD(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   // Screen-space conveyor belt in bottom-right.
-  // Rect: x = [240-122 .. 240-6], y = [320-46 .. 320-10]
+  // Moved up to make room for survival bar at bottom
   int x0 = tft.width()  - 122;
-  int y0 = tft.height() - 46;
+  int y0 = tft.height() - 56;  // moved up 10 pixels
   int x1 = tft.width()  - 6;
-  int y1 = tft.height() - 10;
+  int y1 = tft.height() - 20;  // moved up 10 pixels
 
   // Draw only if this tile overlaps belt rect
   int tx0 = -ox; // tileX
@@ -760,12 +760,12 @@ static void drawBeltHUD(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
 }
 
 static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy) {
-  // Survival timer bar at bottom of screen, above belt HUD
+  // Survival timer bar at very bottom of screen
   // Full width bar showing time remaining
   int barW = tft.width() - 12;
   int barH = 6;
   int x0 = 6;
-  int y0 = tft.height() - 56;
+  int y0 = tft.height() - 8;  // 2 pixels from bottom edge
 
   // Draw only if this tile overlaps bar rect
   int tx0 = -ox;
@@ -921,8 +921,6 @@ static void tryCollectPollen(uint32_t nowMs) {
     if ((dx*dx + dy*dy) <= hitR*hitR) {
       hasPollen = true;
       f.alive = 0;
-      // Reset survival timer
-      survivalTimeLeft = SURVIVAL_TIME_MAX;
       // respawn elsewhere immediately
       spawnFlowerElsewhere(i);
       // chirp
@@ -943,6 +941,9 @@ static void tryStoreAtHive(uint32_t nowMs) {
     hasPollen = false;
     score++;
     spawnBeltItem(nowMs);
+
+    // Reset survival timer on successful delivery!
+    survivalTimeLeft = SURVIVAL_TIME_MAX;
 
     // boost charge progression: every 3 deposits earns 1 charge (max 1)
     if (boostCharge == 0) {
