@@ -163,6 +163,16 @@ static bool btnPrev = false;
 static float wingPhase = 0.0f;
 static float wingSpeed = 0.0f;
 
+// -------------------- SURVIVAL TIMER --------------------
+static const float SURVIVAL_TIME_MAX = 30.0f; // seconds
+static float survivalTimeLeft = SURVIVAL_TIME_MAX;
+static bool isGameOver = false;
+static uint32_t gameOverMs = 0;
+
+// -------------------- WORLD CONSTRAINTS --------------------
+static const float WORLD_RADIUS_MAX = 480.0f; // 2x screen height
+static const float GRAVITY_STRENGTH = 0.4f;   // gentle pull toward hive
+
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
 static int readJoyY() { return analogRead(PIN_JOY_VRY); } // 0..1023
@@ -257,24 +267,31 @@ static void spawnFlowerNearOrigin(int i) {
     spawnFlowerAt(i, wx, wy);
     return;
   }
-  // fallback
-  spawnFlowerAt(i, (int32_t)irand(-200, 200), (int32_t)irand(-200, 200));
+  // fallback - safe spawn near origin
+  int32_t r = (int32_t)irand(100, 180);
+  int32_t a = (int32_t)irand(0, 359);
+  float ang = (float)a * 0.0174532925f;
+  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
 }
 
 static void spawnFlowerElsewhere(int i) {
-  // Respawn away from current bee position so radar matters.
-  // Big ring around *bee* (not hive), to guarantee offscreen targets.
+  // Respawn away from current bee position but within world radius.
+  // Try to place offscreen but reachable.
   for (int tries = 0; tries < 80; tries++) {
-    int32_t r = (int32_t)irand(320, 820);
+    // Random position within world radius
+    int32_t r = (int32_t)irand(60, (int)WORLD_RADIUS_MAX - 40);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
-    int32_t wx = (int32_t)(beeWX + cosf(ang) * (float)r);
-    int32_t wy = (int32_t)(beeWY + sinf(ang) * (float)r);
+    int32_t wx = (int32_t)(cosf(ang) * (float)r);
+    int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
-    // keep somewhat away from hive so you actually travel
-    int32_t hx = wx;
-    int32_t hy = wy;
-    if ((hx*hx + hy*hy) < (220*220)) continue;
+    // Must be within world radius
+    if ((wx*wx + wy*wy) > (int32_t)(WORLD_RADIUS_MAX * WORLD_RADIUS_MAX)) continue;
+
+    // Try to keep away from bee (so radar is useful)
+    int32_t dx_bee = wx - (int32_t)beeWX;
+    int32_t dy_bee = wy - (int32_t)beeWY;
+    if ((dx_bee*dx_bee + dy_bee*dy_bee) < (150*150)) continue;
 
     // avoid overlapping other flowers
     bool ok = true;
@@ -290,8 +307,11 @@ static void spawnFlowerElsewhere(int i) {
     spawnFlowerAt(i, wx, wy);
     return;
   }
-  // fallback
-  spawnFlowerAt(i, (int32_t)(beeWX + irand(-700, 700)), (int32_t)(beeWY + irand(-700, 700)));
+  // fallback: spawn near origin
+  int32_t r = (int32_t)irand(80, 200);
+  int32_t a = (int32_t)irand(0, 359);
+  float ang = (float)a * 0.0174532925f;
+  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
 }
 
 static void initFlowers() {
@@ -739,6 +759,56 @@ static void drawBeltHUD(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   g.print("DELIVERIES");
 }
 
+static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy) {
+  // Survival timer bar at bottom of screen, above belt HUD
+  // Full width bar showing time remaining
+  int barW = tft.width() - 12;
+  int barH = 6;
+  int x0 = 6;
+  int y0 = tft.height() - 56;
+
+  // Draw only if this tile overlaps bar rect
+  int tx0 = -ox;
+  int ty0 = -oy;
+  int tx1 = tx0 + CANVAS_W - 1;
+  int ty1 = ty0 + CANVAS_H - 1;
+  if ((x0 + barW) < tx0 || x0 > tx1 || (y0 + barH) < ty0 || y0 > ty1) return;
+
+  // Calculate fill percentage
+  float pct = clampf(survivalTimeLeft / SURVIVAL_TIME_MAX, 0.0f, 1.0f);
+  int fillW = (int)(pct * (float)barW);
+
+  // Color based on percentage
+  uint16_t fillColor;
+  if (pct > 0.80f) {
+    fillColor = COL_UI_GO;  // Green
+  } else if (pct > 0.40f) {
+    fillColor = COL_YEL;    // Yellow
+  } else if (pct > 0.20f) {
+    fillColor = rgb565(255, 140, 0);  // Orange
+  } else {
+    fillColor = COL_UI_WARN;  // Red
+  }
+
+  // Background (empty bar)
+  uint16_t bgColor = rgb565(20, 20, 25);
+  uint16_t borderColor = rgb565(60, 70, 80);
+
+  g.fillRect(x0 + ox, y0 + oy, barW, barH, bgColor);
+  g.drawRect(x0 + ox, y0 + oy, barW, barH, borderColor);
+
+  // Filled portion
+  if (fillW > 0) {
+    g.fillRect(x0 + ox, y0 + oy, fillW, barH, fillColor);
+  }
+
+  // Flash if critical
+  if (pct <= 0.20f && (millis() % 400) < 200) {
+    g.drawRect(x0 + ox, y0 + oy, barW, barH, COL_UI_WARN);
+    g.drawRect(x0 + 1 + ox, y0 + 1 + oy, barW - 2, barH - 2, COL_UI_WARN);
+  }
+}
+
 // -------------------- RADAR DRAW --------------------
 static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   if (!radarActive) return;
@@ -851,6 +921,8 @@ static void tryCollectPollen(uint32_t nowMs) {
     if ((dx*dx + dy*dy) <= hitR*hitR) {
       hasPollen = true;
       f.alive = 0;
+      // Reset survival timer
+      survivalTimeLeft = SURVIVAL_TIME_MAX;
       // respawn elsewhere immediately
       spawnFlowerElsewhere(i);
       // chirp
@@ -936,6 +1008,9 @@ static void renderFrame(uint32_t nowMs) {
 
       // belt HUD (screen-space)
       drawBeltHUD(canvas, ox, oy, nowMs);
+
+      // survival bar (screen-space)
+      drawSurvivalBar(canvas, ox, oy);
 
       // HUD (top)
       drawHUDInTile(canvas, tileX, tileY, ox, oy);
@@ -1071,9 +1146,31 @@ void loop() {
   beeVX += (desVX - beeVX) * k;
   beeVY += (desVY - beeVY) * k;
 
+  // Gentle gravity toward hive (world origin)
+  if (!isGameOver) {
+    float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
+    if (distToHive > 1.0f) {
+      float gravX = -beeWX / distToHive * GRAVITY_STRENGTH * dt * 100.0f;
+      float gravY = -beeWY / distToHive * GRAVITY_STRENGTH * dt * 100.0f;
+      beeVX += gravX;
+      beeVY += gravY;
+    }
+  }
+
   // Integrate
   beeWX += beeVX * dt;
   beeWY += beeVY * dt;
+
+  // Constrain to world radius
+  float distFromOrigin = sqrtf(beeWX * beeWX + beeWY * beeWY);
+  if (distFromOrigin > WORLD_RADIUS_MAX) {
+    float scale = WORLD_RADIUS_MAX / distFromOrigin;
+    beeWX *= scale;
+    beeWY *= scale;
+    // Stop outward velocity component
+    beeVX *= 0.5f;
+    beeVY *= 0.5f;
+  }
 
   // Wing animation driven by speed
   float sp = fabsf(beeVX) + fabsf(beeVY);
@@ -1082,6 +1179,30 @@ void loop() {
   float hz = 3.0f + 14.0f * wingSpeed;
   wingPhase += 2.0f * 3.1415926f * hz * dt;
   if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
+
+  // Survival timer countdown
+  if (!isGameOver) {
+    survivalTimeLeft -= dt;
+    if (survivalTimeLeft <= 0.0f) {
+      survivalTimeLeft = 0.0f;
+      isGameOver = true;
+      gameOverMs = now;
+    }
+  }
+
+  // Game over auto-restart after 2 seconds
+  if (isGameOver && (uint32_t)(now - gameOverMs) > 2000) {
+    // Reset game
+    beeWX = 0.0f;
+    beeWY = 0.0f;
+    beeVX = 0.0f;
+    beeVY = 0.0f;
+    survivalTimeLeft = SURVIVAL_TIME_MAX;
+    isGameOver = false;
+    hasPollen = false;
+    score = 0;
+    initFlowers();
+  }
 
   // --- Button handling ---
   bool b = joyPressedRaw();
