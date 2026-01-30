@@ -634,39 +634,18 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f) {
 
 // -------------------- BACKGROUND --------------------
 static void drawGravityZones(Adafruit_GFX &g, int ox, int oy) {
-  // Draw visual indicator of gravity strength zones
-  // Centered on hive (screen center)
+  // Simple outer penumbra - just shows the comfortable play area
   int hiveX = beeScreenCX() + ox;
   int hiveY = beeScreenCY() + oy;
 
-  // Current bee distance from hive
+  // Draw a subtle outer boundary circle
+  // Only shows when bee is getting far from center
   float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
 
-  // Draw zones as faint circles
-  // Only show zones when bee is getting far
-  if (distToHive > GRAVITY_ZONE_SAFE * 0.7f) {
-    // Safe zone (green tint)
-    uint16_t safeColor = rgb565(20, 50, 30);
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_SAFE, safeColor);
-  }
-
-  if (distToHive > GRAVITY_ZONE_WARN * 0.7f) {
-    // Warning zone (yellow tint)
-    uint16_t warnColor = rgb565(60, 50, 10);
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN, warnColor);
-    // Double ring for emphasis
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN + 2, warnColor);
-  }
-
-  if (distToHive > GRAVITY_ZONE_DANGER * 0.7f) {
-    // Danger zone (red tint)
-    uint16_t dangerColor = rgb565(80, 20, 20);
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER, dangerColor);
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER + 2, dangerColor);
-    // Pulsing effect
-    if ((millis() % 1000) < 500) {
-      g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_DANGER + 4, dangerColor);
-    }
+  if (distToHive > GRAVITY_ZONE_SAFE * 0.5f) {
+    // Simple faint boundary ring
+    uint16_t boundaryColor = rgb565(40, 60, 80);
+    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN, boundaryColor);
   }
 }
 
@@ -1344,21 +1323,21 @@ void loop() {
   beeVX += (desVX - beeVX) * k;
   beeVY += (desVY - beeVY) * k;
 
-  // Distance-scaled gravity toward hive (world origin)
-  // Pulls harder the further you are - no hard boundary!
+  // Simple gentle gravity toward hive (world origin)
+  // Constant gentle pull to help navigation back to center
   if (!isGameOver) {
     float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
     if (distToHive > 1.0f) {
-      // Calculate gravity strength based on distance
-      // force = base * (distance / reference)^power
-      float distScale = distToHive / GRAVITY_REFERENCE_DIST;
-      float gravityStrength = GRAVITY_BASE_STRENGTH * powf(distScale, GRAVITY_DISTANCE_POWER);
+      // Simple attractor: gentle constant pull toward center
+      // Direction normalized, then scaled by constant strength
+      float dirX = -beeWX / distToHive;  // unit vector toward center
+      float dirY = -beeWY / distToHive;
 
-      // Apply gravity force
-      float gravX = -beeWX / distToHive * gravityStrength * dt * 100.0f;
-      float gravY = -beeWY / distToHive * gravityStrength * dt * 100.0f;
-      beeVX += gravX;
-      beeVY += gravY;
+      // Gentle constant force (tunable - currently ~50 world units/s^2)
+      float gravityForce = 50.0f;
+
+      beeVX += dirX * gravityForce * dt;
+      beeVY += dirY * gravityForce * dt;
     }
   }
 
@@ -1419,52 +1398,49 @@ void loop() {
     initFlowers();
     // Clear trail
     for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
-    return; // Skip rest of frame
+    // Continue to render the reset state
   }
 
   // Don't process normal game input during game over
-  if (isGameOver) {
-    return;
-  }
-
-  // "stick pushed" test for click => boost (if available)
-  bool stickPushed = (fabsf(nx) > 0.20f || fabsf(ny) > 0.20f);
-
-  if (edgeDown) {
-    // Click always gives some percussive feedback.
-    if (!soundBusy()) startSound(SND_CLICK, now);
-
-    if (stickPushed && boostCharge > 0 && !boostCD) {
-      // Trigger boost
-      boostCharge = 0;
-      boostActiveUntilMs = now + 700;
-      boostCooldownUntilMs = now + 3500;
-
-      // impulse in current direction
-      float dirX = nx;
-      float dirY = ny;
-      float dlen = sqrtf(dirX*dirX + dirY*dirY);
-      if (dlen < 0.001f) { dirX = 1.0f; dirY = 0.0f; dlen = 1.0f; }
-      dirX /= dlen; dirY /= dlen;
-      beeVX += dirX * 220.0f;
-      beeVY += dirY * 220.0f;
-
-      // also do a radar ping toward the current target (feels good)
-      beginRadarPing(now);
-    } else {
-      // Radar ping
-      beginRadarPing(now);
-    }
-  }
-
-  // Interactions
-  updateBeltLifetimes(now);
-  tryCollectPollen(now);
-  tryStoreAtHive(now);
-
-  // Sound: ambient wing buzz (only when no event sounds active) - stops when bee stops!
-  // Skip all sound during game over
+  // But DO continue to render!
   if (!isGameOver) {
+
+    // "stick pushed" test for click => boost (if available)
+    bool stickPushed = (fabsf(nx) > 0.20f || fabsf(ny) > 0.20f);
+
+    if (edgeDown) {
+      // Click always gives some percussive feedback.
+      if (!soundBusy()) startSound(SND_CLICK, now);
+
+      if (stickPushed && boostCharge > 0 && !boostCD) {
+        // Trigger boost
+        boostCharge = 0;
+        boostActiveUntilMs = now + 700;
+        boostCooldownUntilMs = now + 3500;
+
+        // impulse in current direction
+        float dirX = nx;
+        float dirY = ny;
+        float dlen = sqrtf(dirX*dirX + dirY*dirY);
+        if (dlen < 0.001f) { dirX = 1.0f; dirY = 0.0f; dlen = 1.0f; }
+        dirX /= dlen; dirY /= dlen;
+        beeVX += dirX * 220.0f;
+        beeVY += dirY * 220.0f;
+
+        // also do a radar ping toward the current target (feels good)
+        beginRadarPing(now);
+      } else {
+        // Radar ping
+        beginRadarPing(now);
+      }
+    }
+
+    // Interactions
+    updateBeltLifetimes(now);
+    tryCollectPollen(now);
+    tryStoreAtHive(now);
+
+    // Sound: ambient wing buzz (only when no event sounds active) - stops when bee stops!
     if (!soundBusy()) {
       if (wingSpeed > 0.08f) {
         int freq = 90 + (int)(wingSpeed * 360.0f);
@@ -1475,7 +1451,7 @@ void loop() {
       }
     }
     updateSound(now);
-  }
+  }  // End of normal game input processing
 
   // Render at a stable cadence
   static uint32_t lastRenderMs = 0;
