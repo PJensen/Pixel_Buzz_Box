@@ -103,6 +103,40 @@ static inline uint32_t hash32(uint32_t x) {
   return x;
 }
 
+// -------------------- FLOWERS --------------------
+struct Flower {
+  int32_t wx, wy;
+  uint8_t alive;
+  uint8_t r;
+  uint16_t petal;
+  uint16_t petalLo;
+  uint16_t center;
+};
+
+static const int FLOWER_N = 7;
+static Flower flowers[FLOWER_N];
+
+// -------------------- BELT HUD --------------------
+struct BeltItem {
+  uint32_t bornMs;
+  uint8_t alive;
+};
+static const int BELT_ITEM_N = 10;
+static BeltItem beltItems[BELT_ITEM_N];
+static const uint32_t BELT_LIFE_MS = 14000;
+
+// -------------------- SOUND SCHEDULER --------------------
+enum SndMode : uint8_t {
+  SND_IDLE = 0,
+  SND_CLICK,
+  SND_RADAR,
+  SND_POLLEN_CHIRP,
+  SND_POWERUP,
+};
+static SndMode sndMode = SND_IDLE;
+static uint8_t sndStep = 0;
+static uint32_t sndNextMs = 0;
+
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
 static int readJoyY() { return analogRead(PIN_JOY_VRY); } // 0..1023
@@ -143,19 +177,6 @@ static uint16_t score = 0;
 // Bee render center (screen-space)
 static inline int beeScreenCX() { return tft.width() / 2; }
 static inline int beeScreenCY() { return (tft.height() + HUD_H) / 2; } // center of playfield
-
-// -------------------- FLOWERS --------------------
-struct Flower {
-  int32_t wx, wy;
-  uint8_t alive;
-  uint8_t r;
-  uint16_t petal;
-  uint16_t petalLo;
-  uint16_t center;
-};
-
-static const int FLOWER_N = 7;
-static Flower flowers[FLOWER_N];
 
 static void initFlowerStyle(Flower &f) {
   // store petals as RGB table so we can derive a darker tint cheaply once
@@ -254,15 +275,7 @@ static void initFlowers() {
   }
 }
 
-// -------------------- BELT HUD --------------------
-struct BeltItem {
-  uint32_t bornMs;
-  uint8_t alive;
-};
-static const int BELT_ITEM_N = 10;
-static BeltItem beltItems[BELT_ITEM_N];
-static const uint32_t BELT_LIFE_MS = 14000;
-
+// -------------------- BELT HUD FUNCTIONS --------------------
 static void spawnBeltItem(uint32_t nowMs) {
   int freeIdx = -1;
   uint32_t oldest = 0xFFFFFFFFu;
@@ -305,18 +318,7 @@ static bool btnPrev = false;
 static float wingPhase = 0.0f;
 static float wingSpeed = 0.0f;
 
-// -------------------- SOUND SCHEDULER --------------------
-enum SndMode : uint8_t {
-  SND_IDLE = 0,
-  SND_CLICK,
-  SND_RADAR,
-  SND_POLLEN_CHIRP,
-  SND_POWERUP,
-};
-static SndMode sndMode = SND_IDLE;
-static uint8_t sndStep = 0;
-static uint32_t sndNextMs = 0;
-
+// -------------------- SOUND FUNCTIONS --------------------
 static void startSound(SndMode m, uint32_t nowMs) {
   sndMode = m;
   sndStep = 0;
