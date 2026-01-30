@@ -181,13 +181,8 @@ static bool isGameOver = false;
 static uint32_t gameOverMs = 0;
 
 // -------------------- WORLD CONSTRAINTS --------------------
-static const float GRAVITY_BASE_STRENGTH = 0.8f;   // base gravity multiplier
-static const float GRAVITY_DISTANCE_POWER = 1.5f;  // how much gravity increases with distance (1.5 = square root scaling)
-static const float GRAVITY_REFERENCE_DIST = 100.0f; // reference distance for scaling
-// Gravity zones for visual feedback
-static const float GRAVITY_ZONE_SAFE = 150.0f;   // green zone - easy movement
-static const float GRAVITY_ZONE_WARN = 300.0f;   // yellow zone - getting harder
-static const float GRAVITY_ZONE_DANGER = 450.0f; // red zone - very hard to escape
+// Spring-based exploration area - joystick maps to target within this radius
+static const float BOUNDARY_COMFORTABLE = 180.0f; // max exploration radius from hive
 
 // -------------------- INPUT --------------------
 static int readJoyX() { return analogRead(PIN_JOY_VRX); } // 0..1023
@@ -291,18 +286,17 @@ static void spawnFlowerNearOrigin(int i) {
 }
 
 static void spawnFlowerElsewhere(int i) {
-  // Respawn away from current bee position but within reasonable range.
-  // Try to place offscreen but reachable (within warning zone).
+  // Respawn away from current bee position but within bounded world.
   for (int tries = 0; tries < 80; tries++) {
-    // Random position within warning zone (still reachable)
-    int32_t r = (int32_t)irand(60, (int)GRAVITY_ZONE_WARN - 40);
+    // Random position within comfortable exploration zone
+    int32_t r = (int32_t)irand(60, (int)BOUNDARY_COMFORTABLE - 20);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
     int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
-    // Keep within warning zone
-    if ((wx*wx + wy*wy) > (int32_t)(GRAVITY_ZONE_WARN * GRAVITY_ZONE_WARN)) continue;
+    // Keep within comfortable zone (flowers always easily reachable)
+    if ((wx*wx + wy*wy) > (int32_t)(BOUNDARY_COMFORTABLE * BOUNDARY_COMFORTABLE)) continue;
 
     // Try to keep away from bee (so radar is useful)
     int32_t dx_bee = wx - (int32_t)beeWX;
@@ -633,19 +627,18 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f) {
 }
 
 // -------------------- BACKGROUND --------------------
-static void drawGravityZones(Adafruit_GFX &g, int ox, int oy) {
-  // Simple outer penumbra - just shows the comfortable play area
+static void drawBoundaryZone(Adafruit_GFX &g, int ox, int oy) {
+  // Show exploration boundary - helps player understand the play area
   int hiveX = beeScreenCX() + ox;
   int hiveY = beeScreenCY() + oy;
 
-  // Draw a subtle outer boundary circle
-  // Only shows when bee is getting far from center
-  float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
+  float distFromCenter = sqrtf(beeWX * beeWX + beeWY * beeWY);
 
-  if (distToHive > GRAVITY_ZONE_SAFE * 0.5f) {
-    // Simple faint boundary ring
-    uint16_t boundaryColor = rgb565(40, 60, 80);
-    g.drawCircle(hiveX, hiveY, (int)GRAVITY_ZONE_WARN, boundaryColor);
+  // Only show boundary when getting close to edge
+  if (distFromCenter > BOUNDARY_COMFORTABLE * 0.6f) {
+    // Subtle boundary ring showing max joystick reach
+    uint16_t boundaryColor = rgb565(50, 70, 90);
+    g.drawCircle(hiveX, hiveY, (int)BOUNDARY_COMFORTABLE, boundaryColor);
   }
 }
 
@@ -1148,7 +1141,7 @@ static void renderFrame(uint32_t nowMs) {
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.25f, 48,  COL_STAR2, COL_STAR3, 0xA11CEu);
       drawStarLayer(canvas, tileX, tileY, ox, oy, 0.55f, 36,  COL_STAR,  COL_STAR2, 0xBEEFu);
       drawWorldGrid(canvas, tileX, tileY, ox, oy);
-      drawGravityZones(canvas, ox, oy);
+      drawBoundaryZone(canvas, ox, oy);
       drawScreenAnchor(canvas, ox, oy, nowMs);
 
       // hive (only if near screen)
@@ -1305,43 +1298,26 @@ void loop() {
   bool boosting = (int32_t)(now - boostActiveUntilMs) < 0;
   bool boostCD  = (int32_t)(boostCooldownUntilMs - now) > 0;
 
-  // Base movement
-  float maxSpeed = boosting ? 520.0f : 240.0f; // world units/s
-  float accel    = boosting ? 12.0f : 8.0f;    // responsiveness
+  // ---- SPRING-BASED MOVEMENT ----
+  // Joystick maps to target position in world space (bounded exploration area)
+  const float roamRadius = BOUNDARY_COMFORTABLE; // max distance from hive
+  float targetWX = nx * roamRadius;
+  float targetWY = ny * roamRadius;
 
-  // Desired velocity (world-space)
-  float desVX = nx * maxSpeed;
-  float desVY = ny * maxSpeed;
+  // When joystick neutral, target snaps to hive center (implicit centering!)
+  if (dx == 0) targetWX = 0.0f;
+  if (dy == 0) targetWY = 0.0f;
 
-  // If stick is centered, ease to 0
-  if (dx == 0) desVX = 0.0f;
-  if (dy == 0) desVY = 0.0f;
+  // Spring constants (higher = more responsive, boost increases responsiveness)
+  const float springK = boosting ? 60.0f : 40.0f;
+  const float damping = boosting ? 15.0f : 10.0f;
 
-  // Smooth approach
-  float k = accel * dt;
-  if (k > 1.0f) k = 1.0f;
-  beeVX += (desVX - beeVX) * k;
-  beeVY += (desVY - beeVY) * k;
+  // Spring force: F = k * (target - current) - damping * velocity
+  float ax = springK * (targetWX - beeWX) - damping * beeVX;
+  float ay = springK * (targetWY - beeWY) - damping * beeVY;
 
-  // Gentle gravity toward hive - only when far from center
-  // This is a HELPER, not forced motion - bee can rest peacefully near hive
-  if (!isGameOver) {
-    float distToHive = sqrtf(beeWX * beeWX + beeWY * beeWY);
-
-    // Only apply gravity when beyond comfortable play area (150 pixels)
-    const float GRAVITY_DEADBAND = 150.0f;
-    if (distToHive > GRAVITY_DEADBAND) {
-      // Gentle nudge back toward center
-      float dirX = -beeWX / distToHive;  // unit vector toward center
-      float dirY = -beeWY / distToHive;
-
-      // Weak force - just a gentle reminder, not a prison
-      float gravityForce = 15.0f;
-
-      beeVX += dirX * gravityForce * dt;
-      beeVY += dirY * gravityForce * dt;
-    }
-  }
+  beeVX += ax * dt;
+  beeVY += ay * dt;
 
   // Integrate
   beeWX += beeVX * dt;
