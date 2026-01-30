@@ -16,6 +16,11 @@ static const int PIN_JOY_SW  = 22; // GP22 (phys 29)
 static const int PIN_JOY_VRX = 26; // GP26/ADC0 (phys 31)
 static const int PIN_JOY_VRY = 27; // GP27/ADC1 (phys 32)
 
+// ---------- BUZZER ----------
+// Use a FREE GPIO (NOT 18 or 20 — those are SPI SCK + LCD DC).
+// GP15 is a great choice; on Pico (40-pin) it's PHYSICAL PIN 20 (bottom-left when USB is at top).
+static const int PIN_BUZZ = 15;   // GP15 (phys 20)
+
 Adafruit_ST7789 tft(&SPI, PIN_CS, PIN_DC, PIN_RST);
 
 // ---------- forward decls (Arduino auto-prototype fix) ----------
@@ -501,7 +506,7 @@ static void renderDirtyRect(int x0, int y0, int w, int h, int beeXi, int beeYi, 
       drawDepositBeltFX(canvas, ox, oy, nowMs);
       drawSparklesFX(canvas, ox, oy, nowMs);
 
-      // NEW: shadow under bee
+      // shadow under bee
       drawBeeShadow(canvas, beeXi + ox, beeYi + oy);
 
       // bee + ring
@@ -561,7 +566,7 @@ static void spawnFlower(int i) {
   RGB p = petals[pi];
 
   f.petal = rgb565(p.r, p.g, p.b);
-  // NEW: darker underlay tint
+  // darker underlay tint
   uint8_t r2 = (p.r > 48) ? (uint8_t)(p.r - 48) : 0;
   uint8_t g2 = (p.g > 48) ? (uint8_t)(p.g - 48) : 0;
   uint8_t b2 = (p.b > 48) ? (uint8_t)(p.b - 48) : 0;
@@ -635,16 +640,16 @@ void setup() {
 
   pinMode(PIN_JOY_SW, INPUT_PULLUP);
 
+  // BUZZER
+  pinMode(PIN_BUZZ, OUTPUT);
+  digitalWrite(PIN_BUZZ, LOW);
+
   SPI.setSCK(PIN_SCK);
   SPI.setTX(PIN_MOSI);
   SPI.begin();
 
   tft.init(240, 320);
   tft.setRotation(1);
-
-  // Optional: if your Adafruit_ST7789 build supports it, you can try bumping SPI.
-  // If this doesn't compile, comment it out.
-  // tft.setSPISpeed(62000000);
 
   // seed RNG
   rngState ^= (uint32_t)analogRead(PIN_JOY_VRX) << 16;
@@ -759,6 +764,22 @@ void loop() {
   float spN = sp / 260.0f; // tune divisor
   if (spN > 1.0f) spN = 1.0f;
   wingSpeed = spN;
+
+  // ---------- BUZZ (flap-driven) ----------
+  // Cheap update cadence so tone() isn't spammed.
+  static uint32_t lastBuzzMs = 0;
+  if ((uint32_t)(now - lastBuzzMs) >= 30) { // ~33 Hz
+    lastBuzzMs = now;
+
+    if (wingSpeed > 0.06f) {
+      int freq = 100 + (int)(wingSpeed * 680.0f); // ~120..800 Hz
+      if (freq < 60)   freq = 60;
+      if (freq > 1200) freq = 1200;
+      tone(PIN_BUZZ, freq);
+    } else {
+      noTone(PIN_BUZZ);
+    }
+  }
 
   float hz = 3.0f + 14.0f * wingSpeed; // 3..17 Hz
   wingPhase += 2.0f * 3.1415926f * hz * dt;
