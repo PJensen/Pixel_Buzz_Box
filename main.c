@@ -962,11 +962,14 @@ static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
   };
   int msgIdx = score % 6;
 
+  g.setTextWrap(false);
+
   // Title
   g.setTextSize(2);
   g.setTextColor(COL_YEL);
   int titleW = strlen(messages[msgIdx]) * 12;
-  g.setCursor(panelX + (panelW - titleW) / 2 + ox, panelY + 12 + oy);
+  int titleX = panelX + (panelW - titleW) / 2;
+  g.setCursor(titleX + ox, panelY + 12 + oy);
   g.print(messages[msgIdx]);
 
   // Score
@@ -988,6 +991,8 @@ static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
     g.setCursor(panelX + 30 + ox, panelY + 82 + oy);
     g.print("Press to play again");
   }
+
+  g.setTextWrap(true);
 }
 
 // -------------------- RADAR DRAW --------------------
