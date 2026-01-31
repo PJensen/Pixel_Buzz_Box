@@ -230,6 +230,26 @@
   static SndMode sndMode = SND_IDLE;
   static uint8_t sndStep = 0;
   static uint32_t sndNextMs = 0;
+  static float sndLastEventFreq = 0.0f;
+  static uint32_t sndEventTailUntilMs = 0;
+  static uint32_t sndEventTailStartMs = 0;
+  static float sndEventTailFreq = 0.0f;
+  static float sndAmbientFreqSmooth = 0.0f;
+  static float sndAmbientEnv = 0.0f;
+  static float sndPrevVX = 0.0f;
+  static float sndPrevVY = 0.0f;
+  static float sndHeading = 0.0f;
+  static float sndTurnRateSmooth = 0.0f;
+  static float sndAccelSmooth = 0.0f;
+  static float sndRadialAccelSmooth = 0.0f;
+  static float sndVibratoPhase = 0.0f;
+  static uint32_t sndSwishUntilMs = 0;
+  static uint32_t sndSwishStartMs = 0;
+  static float sndSwishSign = 0.0f;
+  static uint32_t sndAccelPulseUntilMs = 0;
+  static uint32_t sndAccelPulseStartMs = 0;
+  static float sndAccelPulseStrength = 0.0f;
+  static float sndLastUnloadFreq = 0.0f;
 
   // -------------------- BOOST --------------------
   static uint8_t depositsTowardBoost = 0;
@@ -506,6 +526,7 @@
     sndMode = m;
     sndStep = 0;
     sndNextMs = nowMs;
+    sndEventTailUntilMs = 0;
   }
 
   static void updateSound(uint32_t nowMs) {
@@ -515,11 +536,15 @@
     switch (sndMode) {
       case SND_CLICK:
         if (sndStep == 0) {
-          tone(PIN_BUZZ, 1500, 18);
+          sndLastEventFreq = 1500.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 18);
           sndNextMs = nowMs + 22;
           sndStep++;
         } else {
           noTone(PIN_BUZZ);
+          sndEventTailFreq = sndLastEventFreq;
+          sndEventTailStartMs = nowMs;
+          sndEventTailUntilMs = nowMs + 110;
           sndMode = SND_IDLE;
         }
         break;
@@ -527,38 +552,50 @@
       case SND_RADAR:
         // percussive tick + two pips
         if (sndStep == 0) {
-          tone(PIN_BUZZ, 1200, 14);
+          sndLastEventFreq = 1200.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 14);
           sndNextMs = nowMs + 18;
           sndStep++;
         } else if (sndStep == 1) {
-          tone(PIN_BUZZ, 760, 50);
+          sndLastEventFreq = 760.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 50);
           sndNextMs = nowMs + 60;
           sndStep++;
         } else if (sndStep == 2) {
-          tone(PIN_BUZZ, 980, 55);
+          sndLastEventFreq = 980.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
           sndNextMs = nowMs + 70;
           sndStep++;
         } else {
           noTone(PIN_BUZZ);
+          sndEventTailFreq = sndLastEventFreq;
+          sndEventTailStartMs = nowMs;
+          sndEventTailUntilMs = nowMs + 140;
           sndMode = SND_IDLE;
         }
         break;
 
       case SND_POLLEN_CHIRP:
         if (sndStep == 0) {
-          tone(PIN_BUZZ, 720, 55);
+          sndLastEventFreq = 720.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
           sndNextMs = nowMs + 65;
           sndStep++;
         } else if (sndStep == 1) {
-          tone(PIN_BUZZ, 880, 55);
+          sndLastEventFreq = 880.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
           sndNextMs = nowMs + 65;
           sndStep++;
         } else if (sndStep == 2) {
-          tone(PIN_BUZZ, 620, 80);
+          sndLastEventFreq = 620.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 80);
           sndNextMs = nowMs + 95;
           sndStep++;
         } else {
           noTone(PIN_BUZZ);
+          sndEventTailFreq = sndLastEventFreq;
+          sndEventTailStartMs = nowMs;
+          sndEventTailUntilMs = nowMs + 130;
           sndMode = SND_IDLE;
         }
         break;
@@ -566,19 +603,25 @@
       case SND_POWERUP:
         // short rising arpeggio
         if (sndStep == 0) {
-          tone(PIN_BUZZ, 520, 70);
+          sndLastEventFreq = 520.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 70);
           sndNextMs = nowMs + 78;
           sndStep++;
         } else if (sndStep == 1) {
-          tone(PIN_BUZZ, 760, 70);
+          sndLastEventFreq = 760.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 70);
           sndNextMs = nowMs + 78;
           sndStep++;
         } else if (sndStep == 2) {
-          tone(PIN_BUZZ, 1040, 90);
+          sndLastEventFreq = 1040.0f;
+          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 90);
           sndNextMs = nowMs + 105;
           sndStep++;
         } else {
           noTone(PIN_BUZZ);
+          sndEventTailFreq = sndLastEventFreq;
+          sndEventTailStartMs = nowMs;
+          sndEventTailUntilMs = nowMs + 160;
           sndMode = SND_IDLE;
         }
         break;
@@ -1591,6 +1634,7 @@
     if (unloadRemaining > 0) {
       uint8_t stepIndex = (uint8_t)(unloadTotal - unloadRemaining);
       uint16_t freq = (uint16_t)(UNLOAD_CHIRP_BASE + (uint16_t)stepIndex * UNLOAD_CHIRP_STEP);
+      sndLastUnloadFreq = (float)freq;
       tone(PIN_BUZZ, freq, UNLOAD_CHIRP_MS);
       unloadRemaining--;
       pollenCount = unloadRemaining;
@@ -1611,6 +1655,11 @@
 
     isUnloading = false;
     unloadRemaining = 0;
+    if (sndLastUnloadFreq > 0.0f) {
+      sndEventTailFreq = sndLastUnloadFreq;
+      sndEventTailStartMs = nowMs;
+      sndEventTailUntilMs = nowMs + 140;
+    }
     if (unloadTotal > 0) {
       int hiveSX, hiveSY;
       worldToScreen(0, 0, hiveSX, hiveSY);
@@ -1888,6 +1937,45 @@
       wingPhase += 2.0f * 3.1415926f * hz * dt;
       if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
 
+      // Sound dynamics: heading/turn rate + acceleration for buzzer modulation
+      float speed = sqrtf(beeVX * beeVX + beeVY * beeVY);
+      float heading = sndHeading;
+      if (speed > 0.02f) heading = atan2f(beeVY, beeVX);
+      float dHeading = heading - sndHeading;
+      while (dHeading > 3.1415926f) dHeading -= 6.2831853f;
+      while (dHeading < -3.1415926f) dHeading += 6.2831853f;
+      float turnRate = (dt > 0.0001f) ? (dHeading / dt) : 0.0f;
+      sndHeading = heading;
+
+      float dvx = beeVX - sndPrevVX;
+      float dvy = beeVY - sndPrevVY;
+      float accelMag = (dt > 0.0001f) ? (sqrtf(dvx * dvx + dvy * dvy) / dt) : 0.0f;
+      float accelAlong = 0.0f;
+      if (speed > 0.02f && dt > 0.0001f) {
+        accelAlong = (dvx * beeVX + dvy * beeVY) / (speed * dt);
+      }
+
+      float smoothRate = clampf(6.0f * dt, 0.0f, 1.0f);
+      sndTurnRateSmooth += (turnRate - sndTurnRateSmooth) * smoothRate;
+      sndAccelSmooth += (accelMag - sndAccelSmooth) * clampf(4.0f * dt, 0.0f, 1.0f);
+      sndRadialAccelSmooth += (accelAlong - sndRadialAccelSmooth) * clampf(5.0f * dt, 0.0f, 1.0f);
+
+      if (fabsf(turnRate) > 3.2f && (int32_t)(now - sndSwishUntilMs) > 0) {
+        sndSwishStartMs = now;
+        sndSwishUntilMs = now + 120;
+        sndSwishSign = (turnRate >= 0.0f) ? 1.0f : -1.0f;
+      }
+
+      float accelN = clampf(accelMag / 420.0f, 0.0f, 1.0f);
+      if (accelN > 0.35f && (int32_t)(now - sndAccelPulseUntilMs) > 0) {
+        sndAccelPulseStartMs = now;
+        sndAccelPulseUntilMs = now + 140;
+        sndAccelPulseStrength = accelN;
+      }
+
+      sndPrevVX = beeVX;
+      sndPrevVY = beeVY;
+
       // Boost trail VFX - much more prominent!
       if (boosting && wingSpeed > 0.2f) {
         // Spawn trail particles every ~20ms for denser trail
@@ -1945,6 +2033,9 @@
         // Stop all sounds immediately!
         noTone(PIN_BUZZ);
         sndMode = SND_IDLE;
+        sndEventTailUntilMs = 0;
+        sndAmbientEnv = 0.0f;
+        sndAmbientFreqSmooth = 0.0f;
         isUnloading = false;
         unloadRemaining = 0;
         unloadTotal = 0;
@@ -1968,6 +2059,15 @@
       beeWY = 0.0f;
       beeVX = 0.0f;
       beeVY = 0.0f;
+      sndPrevVX = 0.0f;
+      sndPrevVY = 0.0f;
+      sndHeading = 0.0f;
+      sndTurnRateSmooth = 0.0f;
+      sndAccelSmooth = 0.0f;
+      sndRadialAccelSmooth = 0.0f;
+      sndEventTailUntilMs = 0;
+      sndAmbientEnv = 0.0f;
+      sndAmbientFreqSmooth = 0.0f;
       survivalTimeLeft = SURVIVAL_TIME_MAX;
       isGameOver = false;
       pollenCount = 0;
@@ -2001,12 +2101,54 @@
 
       // Sound: ambient wing buzz (only when no event sounds active) - stops when bee stops!
       if (!soundBusy()) {
-        if (wingSpeed > 0.08f) {
-          int freq = 90 + (int)(wingSpeed * 360.0f);
-          int vib = (int)(sinf((float)now * 0.018f) * (6.0f + wingSpeed * 12.0f));
-          freq += vib;
-          freq = clampi(freq, 80, 520);
-          tone(PIN_BUZZ, freq);
+        bool tailActive = (int32_t)(now - sndEventTailUntilMs) < 0;
+        float envTarget = (wingSpeed > 0.05f || tailActive) ? 1.0f : 0.0f;
+        float envRate = (envTarget > sndAmbientEnv) ? 8.0f : 4.0f;
+        sndAmbientEnv += (envTarget - sndAmbientEnv) * clampf(envRate * dt, 0.0f, 1.0f);
+
+        float base = 110.0f + wingSpeed * 320.0f;
+        uint32_t jitterSeed = hash32((uint32_t)(now >> 2) + 0x5f3759dfu);
+        float jitter = ((int)(jitterSeed & 0x7u) - 3) * 1.6f;
+
+        float turnSkew = clampf(sndTurnRateSmooth * 0.75f, -16.0f, 16.0f);
+        float doppler = clampf(sndRadialAccelSmooth * 0.045f, -14.0f, 14.0f);
+
+        float vibRate = 6.5f + clampf(fabsf(sndTurnRateSmooth) * 0.12f, 0.0f, 6.0f);
+        float vibDepth = 2.5f + wingSpeed * 6.0f
+          + clampf(sndAccelSmooth * 0.035f, 0.0f, 8.0f)
+          + clampf(fabsf(sndTurnRateSmooth) * 0.18f, 0.0f, 5.0f);
+        sndVibratoPhase += 6.2831853f * vibRate * dt;
+        float vib = sinf(sndVibratoPhase) * vibDepth;
+
+        float swish = 0.0f;
+        if ((int32_t)(now - sndSwishUntilMs) < 0) {
+          float t = (float)(now - sndSwishStartMs) / (float)(sndSwishUntilMs - sndSwishStartMs);
+          t = clampf(t, 0.0f, 1.0f);
+          float env = 1.0f - fabsf(1.0f - 2.0f * t);
+          swish = sndSwishSign * 12.0f * env;
+        }
+
+        float accelPulse = 0.0f;
+        if ((int32_t)(now - sndAccelPulseUntilMs) < 0) {
+          float t = (float)(now - sndAccelPulseStartMs) / (float)(sndAccelPulseUntilMs - sndAccelPulseStartMs);
+          t = clampf(t, 0.0f, 1.0f);
+          float env = 1.0f - t;
+          accelPulse = sndAccelPulseStrength * 14.0f * env;
+        }
+
+        float target = base + jitter + turnSkew + doppler + vib + swish + accelPulse;
+
+        if (tailActive && sndEventTailUntilMs > sndEventTailStartMs) {
+          float t = (float)(now - sndEventTailStartMs) / (float)(sndEventTailUntilMs - sndEventTailStartMs);
+          t = clampf(t, 0.0f, 1.0f);
+          float blend = t * t;
+          target = sndEventTailFreq * (1.0f - blend) + target * blend;
+        }
+
+        sndAmbientFreqSmooth += (target - sndAmbientFreqSmooth) * clampf(10.0f * dt, 0.0f, 1.0f);
+        if (sndAmbientEnv > 0.05f) {
+          int freq = clampi((int)(sndAmbientFreqSmooth), 80, 620);
+          tone(PIN_BUZZ, (uint16_t)freq);
         } else {
           noTone(PIN_BUZZ);
         }
