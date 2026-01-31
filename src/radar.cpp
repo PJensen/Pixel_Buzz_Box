@@ -14,7 +14,7 @@ bool radarToHive = false;
 // -------------------- RADAR PING --------------------
 void beginRadarPing(uint32_t nowMs) {
   radarActive = true;
-  radarUntilMs = nowMs + 320;
+  radarUntilMs = nowMs + RADAR_DURATION_MS;
 
   if (pollenCount > 0) {
     // Point to hive when carrying pollen

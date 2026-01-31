@@ -32,8 +32,8 @@ void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs) {
 
 void updateCamera(float dt, bool boosting, uint32_t nowMs) {
   // Zoom
-  float targetZoom = boosting ? 1.22f : 1.0f;
-  float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
+  float targetZoom = boosting ? CAMERA_ZOOM_BOOST : CAMERA_ZOOM_NORMAL;
+  float zoomLerp = clampf(CAMERA_ZOOM_LERP_SPEED * dt, 0.0f, 1.0f);
   cameraZoom += (targetZoom - cameraZoom) * zoomLerp;
 
   // Shake
@@ -41,9 +41,9 @@ void updateCamera(float dt, bool boosting, uint32_t nowMs) {
     float t = (float)(cameraShakeUntilMs - nowMs) / (float)cameraShakeDurationMs;
     t = clampf(t, 0.0f, 1.0f);
     float amp = cameraShakeMagnitude * t * t;
-    float phase = (float)nowMs * 0.045f;
-    cameraShakeX = sinf(phase * 6.2f) * amp;
-    cameraShakeY = cosf(phase * 7.4f) * amp;
+    float phase = (float)nowMs * CAMERA_SHAKE_PHASE_MULT;
+    cameraShakeX = sinf(phase * CAMERA_SHAKE_FREQ_X) * amp;
+    cameraShakeY = cosf(phase * CAMERA_SHAKE_FREQ_Y) * amp;
   } else {
     cameraShakeX = 0.0f;
     cameraShakeY = 0.0f;
@@ -90,7 +90,6 @@ void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs) {
 }
 
 void updateTrailParticles(uint32_t nowMs) {
-  const uint32_t TRAIL_LIFE_MS = 250;
   for (int i = 0; i < TRAIL_MAX; i++) {
     if (!trail[i].alive) continue;
     if ((uint32_t)(nowMs - trail[i].bornMs) > TRAIL_LIFE_MS) {
@@ -123,7 +122,7 @@ void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy) {
   scorePopups[idx].value = value;
   scorePopups[idx].baseSX = (int16_t)sx;
   scorePopups[idx].baseSY = (int16_t)sy;
-  scorePopups[idx].driftX = (int8_t)irand(-10, 10);
+  scorePopups[idx].driftX = (int8_t)irand(SCORE_POPUP_DRIFT_MIN, SCORE_POPUP_DRIFT_MAX);
 }
 
 void updateScorePopups(uint32_t nowMs) {

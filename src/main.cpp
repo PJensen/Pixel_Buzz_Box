@@ -16,6 +16,11 @@
 #include <SPI.h>
 #include <math.h>
 
+// -------------------- SHARED GLOBALS --------------------
+uint32_t rngState = 0xA5A5F00Du;
+Adafruit_ST7789 tft(&SPI, PIN_CS, PIN_DC, PIN_RST);
+GFXcanvas16 canvas(CANVAS_W, CANVAS_H);
+
 // Global sound synthesizer
 BuzzSynth buzzer(PIN_BUZZ);
 
@@ -67,7 +72,7 @@ void loop() {
   static uint32_t lastMs = millis();
   uint32_t now = millis();
   uint32_t dtMs = now - lastMs;
-  if (dtMs > 60) dtMs = 60;
+  if (dtMs > MAX_DELTA_MS) dtMs = MAX_DELTA_MS;
   lastMs = now;
   float dt = (float)dtMs / 1000.0f;
 
@@ -82,7 +87,7 @@ void loop() {
     // Check boost state
     bool boosting = isBoosting(now);
     if (boosting && !wasBoosting) {
-      triggerCameraShake(now, 6.5f, 180);
+      triggerCameraShake(now, CAMERA_SHAKE_MAGNITUDE, CAMERA_SHAKE_DURATION_MS);
     }
     wasBoosting = boosting;
 
@@ -93,7 +98,7 @@ void loop() {
     // Boost trail VFX
     if (boosting && wingSpeed > 0.2f) {
       static uint32_t lastTrailMs = 0;
-      if ((uint32_t)(now - lastTrailMs) > 20) {
+      if ((uint32_t)(now - lastTrailMs) > TRAIL_SPAWN_INTERVAL_MS) {
         float spN = clampf((fabsf(beeVX) + fabsf(beeVY)) / WING_SPEED_DIVISOR, 0.0f, 1.0f);
         spawnTrailParticle(beeWX, beeWY, spN, now);
         spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, spN, now);
@@ -111,7 +116,7 @@ void loop() {
     wasBoosting = false;
     stopBeeMovement();
 
-    float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
+    float zoomLerp = clampf(CAMERA_ZOOM_LERP_SPEED * dt, 0.0f, 1.0f);
     cameraZoom += (1.0f - cameraZoom) * zoomLerp;
     cameraShakeX = 0.0f;
     cameraShakeY = 0.0f;
@@ -191,16 +196,16 @@ void loop() {
 
   // Render at adaptive cadence
   static uint32_t lastRenderMs = 0;
-  uint32_t renderInterval = 40;
+  uint32_t renderInterval = RENDER_INTERVAL_ACTIVE_MS;
   bool boosting = isBoosting(now);
   bool idle = !isGameOver && !isUnloading && !radarActive && !boosting
               && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive() && !anyScorePopupAlive();
-  if (idle) renderInterval = 80;
+  if (idle) renderInterval = RENDER_INTERVAL_IDLE_MS;
 
   if ((uint32_t)(now - lastRenderMs) >= renderInterval) {
     lastRenderMs = now;
     renderFrame(now);
   }
 
-  delay(2);
+  delay(LOOP_DELAY_MS);
 }

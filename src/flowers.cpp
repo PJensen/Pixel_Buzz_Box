@@ -35,7 +35,7 @@ void initFlowerStyle(Flower &f) {
 void spawnFlowerAt(int i, int32_t wx, int32_t wy) {
   Flower &f = flowers[i];
   f.alive = 1;
-  f.r = (uint8_t)irand(6, 11);
+  f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
   f.wx = wx;
   f.wy = wy;
   initFlowerStyle(f);
@@ -44,7 +44,7 @@ void spawnFlowerAt(int i, int32_t wx, int32_t wy) {
 
 void spawnFlowerNearOrigin(int i) {
   for (int tries = 0; tries < 60; tries++) {
-    int32_t r = (int32_t)irand(90, 220);
+    int32_t r = (int32_t)irand(FLOWER_SPAWN_NEAR_DIST_MIN, FLOWER_SPAWN_NEAR_DIST_MAX);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
@@ -54,7 +54,7 @@ void spawnFlowerNearOrigin(int i) {
     for (int k = 0; k < i; k++) {
       int32_t dx = wx - flowers[k].wx;
       int32_t dy = wy - flowers[k].wy;
-      if ((dx*dx + dy*dy) < (80*80)) { ok = false; break; }
+      if ((dx*dx + dy*dy) < (FLOWER_COLLISION_DIST*FLOWER_COLLISION_DIST)) { ok = false; break; }
     }
     if (!ok) continue;
 
@@ -70,7 +70,7 @@ void spawnFlowerNearOrigin(int i) {
 
 void spawnFlowerElsewhere(int i) {
   for (int tries = 0; tries < 80; tries++) {
-    int32_t r = (int32_t)irand(60, (int)BOUNDARY_COMFORTABLE - 20);
+    int32_t r = (int32_t)irand(FLOWER_SPAWN_ELSEWHERE_DIST_MIN, (int)BOUNDARY_COMFORTABLE - FLOWER_SPAWN_ELSEWHERE_MARGIN);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
@@ -80,7 +80,7 @@ void spawnFlowerElsewhere(int i) {
 
     int32_t dx_bee = wx - (int32_t)beeWX;
     int32_t dy_bee = wy - (int32_t)beeWY;
-    if ((dx_bee*dx_bee + dy_bee*dy_bee) < (150*150)) continue;
+    if ((dx_bee*dx_bee + dy_bee*dy_bee) < (FLOWER_BEE_AVOIDANCE_DIST*FLOWER_BEE_AVOIDANCE_DIST)) continue;
 
     bool ok = true;
     for (int k = 0; k < FLOWER_N; k++) {
@@ -88,7 +88,7 @@ void spawnFlowerElsewhere(int i) {
       if (!flowers[k].alive) continue;
       int32_t dx = wx - flowers[k].wx;
       int32_t dy = wy - flowers[k].wy;
-      if ((dx*dx + dy*dy) < (120*120)) { ok = false; break; }
+      if ((dx*dx + dy*dy) < (FLOWER_SPACING_ELSEWHERE*FLOWER_SPACING_ELSEWHERE)) { ok = false; break; }
     }
     if (!ok) continue;
 
@@ -123,7 +123,7 @@ bool tryCollectPollen(uint32_t nowMs) {
 
     int32_t dx = bx - f.wx;
     int32_t dy = by - f.wy;
-    int32_t hitR = (int32_t)f.r + 14;
+    int32_t hitR = (int32_t)f.r + BEE_HIT_RADIUS;
     if ((dx*dx + dy*dy) <= hitR*hitR) {
       pollenCount++;
       f.alive = 0;
