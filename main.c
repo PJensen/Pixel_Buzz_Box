@@ -61,6 +61,83 @@ enum SndMode : uint8_t {
   SND_POWERUP,
 };
 
+// -------------------- FORWARD DECLARATIONS --------------------
+static inline int clampi(int v, int lo, int hi);
+static inline float clampf(float v, float lo, float hi);
+static inline uint8_t clampu8(int v);
+static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b);
+static inline uint32_t xrnd();
+static inline int irand(int lo, int hi);
+static inline uint32_t hash32(uint32_t x);
+
+static int readJoyX();
+static int readJoyY();
+static bool joyPressedRaw();
+static int applyDeadzone(int v, int center, int dz);
+static void calibrateJoystick();
+
+static inline int beeScreenCX();
+static inline int beeScreenCY();
+static inline void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs);
+
+static void initFlowerStyle(Flower &f);
+static void spawnFlowerAt(int i, int32_t wx, int32_t wy);
+static void spawnFlowerNearOrigin(int i);
+static void spawnFlowerElsewhere(int i);
+static void initFlowers();
+
+static void spawnBeltItem(uint32_t nowMs);
+static void updateBeltLifetimes(uint32_t nowMs);
+
+static void startSound(SndMode m, uint32_t nowMs);
+static void updateSound(uint32_t nowMs);
+static bool soundBusy();
+
+static inline void worldToScreen(int32_t wx, int32_t wy, int &sx, int &sy);
+static inline void worldToScreenF(float wx, float wy, int &sx, int &sy);
+static inline uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt);
+
+static void drawBoostAura(Adafruit_GFX &g, int x, int y, uint32_t nowMs);
+static void drawPollenSparkles(Adafruit_GFX &g, int x, int y, uint32_t nowMs);
+static void drawBeeShadow(Adafruit_GFX &g, int x, int y);
+static void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs);
+static void updateTrailParticles(uint32_t nowMs);
+static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs);
+static void drawPollenOrbit(Adafruit_GFX &g, int x, int y);
+static void drawBee(Adafruit_GFX &g, int x, int y);
+static void drawHive(Adafruit_GFX &g, int x, int y);
+static void drawHivePulse(Adafruit_GFX &g, int x, int y, uint32_t nowMs);
+static void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy);
+static void updateScorePopups(uint32_t nowMs);
+static void drawScorePopups(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs);
+
+static void drawStarLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, float parallax, int count, uint16_t c1, uint16_t c2, uint32_t salt);
+static void drawNebulaLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, uint32_t nowMs);
+static void drawWorldGrid(Adafruit_GFX &g, int ox, int oy);
+static void drawBoundaryZone(Adafruit_GFX &g, int ox, int oy);
+static void drawScreenAnchor(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs);
+static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t nowMs, uint32_t bornMs);
+
+static void drawBeltHUD(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs);
+static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy);
+static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy);
+static void drawGameOver(Adafruit_GFX &g, int ox, int oy);
+static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs);
+
+static bool findNearestFlower(int32_t &outWX, int32_t &outWY);
+static void beginRadarPing(uint32_t nowMs);
+static void tryCollectPollen(uint32_t nowMs);
+static void tryStoreAtHive(uint32_t nowMs);
+static void beginUnload(uint32_t nowMs);
+static void updateUnload(uint32_t nowMs);
+static bool anyTrailAlive();
+static bool anyBeltAlive();
+static bool anyScorePopupAlive();
+static void renderFrame(uint32_t nowMs);
+
+void setup();
+void loop();
+
 // -------------------- UTIL --------------------
 static inline int clampi(int v, int lo, int hi) {
   if (v < lo) return lo;
@@ -107,6 +184,10 @@ static const uint16_t COL_UI_WARN    = rgb565(255,120,120);
 
 static const int HUD_H = 28;
 static const uint8_t MAX_POLLEN_CARRY = 8;
+static const uint32_t UNLOAD_TICK_MS = 100;
+static const uint16_t UNLOAD_CHIRP_BASE = 580;
+static const uint16_t UNLOAD_CHIRP_STEP = 70;
+static const uint16_t UNLOAD_CHIRP_MS = 55;
 
 // -------------------- CANVAS (micro-tiles) --------------------
 // Exact fit for 240x320: 2 cols x 4 rows
@@ -262,6 +343,10 @@ static float beeVX = 0.0f, beeVY = 0.0f;
 
 static uint8_t pollenCount = 0;
 static uint16_t score = 0;
+static bool isUnloading = false;
+static uint8_t unloadRemaining = 0;
+static uint8_t unloadTotal = 0;
+static uint32_t unloadNextMs = 0;
 
 // Bee render center (screen-space)
 static float cameraZoom = 1.0f;
@@ -1419,6 +1504,7 @@ static void beginRadarPing(uint32_t nowMs) {
 // -------------------- INTERACTIONS --------------------
 static void tryCollectPollen(uint32_t nowMs) {
   if (pollenCount >= MAX_POLLEN_CARRY) return;
+  if (isUnloading) return;
 
   int32_t bx = (int32_t)beeWX;
   int32_t by = (int32_t)beeWY;
@@ -1447,28 +1533,54 @@ static void tryCollectPollen(uint32_t nowMs) {
   }
 }
 
+static void beginUnload(uint32_t nowMs) {
+  if (isUnloading || pollenCount == 0) return;
+  isUnloading = true;
+  unloadRemaining = pollenCount;
+  unloadTotal = pollenCount;
+  unloadNextMs = nowMs;
+  noTone(PIN_BUZZ);
+  sndMode = SND_IDLE;
+}
+
+static void updateUnload(uint32_t nowMs) {
+  if (!isUnloading) return;
+  if ((int32_t)(nowMs - unloadNextMs) < 0) return;
+
+  if (unloadRemaining > 0) {
+    uint8_t stepIndex = (uint8_t)(unloadTotal - unloadRemaining);
+    uint16_t freq = (uint16_t)(UNLOAD_CHIRP_BASE + (uint16_t)stepIndex * UNLOAD_CHIRP_STEP);
+    tone(PIN_BUZZ, freq, UNLOAD_CHIRP_MS);
+    unloadRemaining--;
+    pollenCount = unloadRemaining;
+    score = (uint16_t)(score + 1);
+    spawnBeltItem(nowMs);
+    hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
+    unloadNextMs = nowMs + UNLOAD_TICK_MS;
+    return;
+  }
+
+  isUnloading = false;
+  unloadRemaining = 0;
+  if (unloadTotal > 0) {
+    int hiveSX, hiveSY;
+    worldToScreen(0, 0, hiveSX, hiveSY);
+    spawnScorePopup(nowMs, unloadTotal, hiveSX, hiveSY);
+  }
+  unloadTotal = 0;
+  survivalTimeLeft = SURVIVAL_TIME_MAX;
+}
+
 static void tryStoreAtHive(uint32_t nowMs) {
   if (pollenCount == 0) return;
+  if (isUnloading) return;
 
   int32_t bx = (int32_t)beeWX;
   int32_t by = (int32_t)beeWY;
   const int32_t hiveR = 22;
 
   if ((bx*bx + by*by) <= (hiveR*hiveR)) {
-    uint8_t delivered = pollenCount;
-    pollenCount = 0;
-    score = (uint16_t)(score + delivered);
-    for (uint8_t i = 0; i < delivered; i++) {
-      spawnBeltItem(nowMs);
-    }
-    hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
-    int hiveSX, hiveSY;
-    worldToScreen(0, 0, hiveSX, hiveSY);
-    spawnScorePopup(nowMs, delivered, hiveSX, hiveSY);
-
-    // Reset survival timer on successful delivery!
-    survivalTimeLeft = SURVIVAL_TIME_MAX;
-
+    beginUnload(nowMs);
   }
 }
 
@@ -1617,6 +1729,9 @@ void setup() {
 
   pollenCount = 0;
   score = 0;
+  isUnloading = false;
+  unloadRemaining = 0;
+  unloadTotal = 0;
 
   depositsTowardBoost = 0;
   boostCharge = 0;
@@ -1639,118 +1754,137 @@ void loop() {
   lastMs = now;
   float dt = (float)dtMs / 1000.0f;
 
-  // Maintain observed extremes for Y (helps asymmetry)
-  int rawX = readJoyX();
-  int rawY = readJoyY();
-  if (rawY < joyMinY) joyMinY = rawY;
-  if (rawY > joyMaxY) joyMaxY = rawY;
-
-  // Deadzone
-  const int dead = 35;
-  int dx = applyDeadzone(rawX, joyCenterX, dead);
-  int dy = applyDeadzone(rawY, joyCenterY, dead);
-
-  // Normalize X
-  float nx = -(float)clampi(dx, -512, 512) / 512.0f;
-
-  // Normalize Y with auto-cal asymmetry
-  int upSpan   = joyCenterY - joyMinY;
-  int downSpan = joyMaxY - joyCenterY;
-  if (upSpan < 1) upSpan = 1;
-  if (downSpan < 1) downSpan = 1;
-
-  float nyRaw;
-  const float DOWN_BOOST = 1.20f;
-  if (dy >= 0) {
-    nyRaw = (float)dy / (float)downSpan;
-    nyRaw *= DOWN_BOOST;
-  } else {
-    nyRaw = (float)dy / (float)upSpan;
-  }
-  nyRaw = clampf(nyRaw, -1.0f, 1.0f);
-  float ny = -nyRaw;
-
-  // Circle->square boost (diagonals)
-  float ax = fabsf(nx);
-  float ay = fabsf(ny);
-  float m  = (ax > ay) ? ax : ay;
-  if (m > 0.0001f) {
-    nx /= m;
-    ny /= m;
-    nx = clampf(nx, -1.0f, 1.0f);
-    ny = clampf(ny, -1.0f, 1.0f);
-  }
-
-  // Determine if boost is active
-  bool boosting = (int32_t)(now - boostActiveUntilMs) < 0;
+  bool boosting = false;
   static bool wasBoosting = false;
-  if (boosting && !wasBoosting) {
-    triggerCameraShake(now, 6.5f, 180);
-  }
-  wasBoosting = boosting;
 
-  // ---- SPRING-BASED MOVEMENT ----
-  // Joystick maps to target position in world space (bounded exploration area)
-  const float roamRadius = BOUNDARY_COMFORTABLE; // max distance from hive
-  float targetWX = nx * roamRadius;
-  float targetWY = ny * roamRadius;
+  if (!isUnloading) {
+    // Maintain observed extremes for Y (helps asymmetry)
+    int rawX = readJoyX();
+    int rawY = readJoyY();
+    if (rawY < joyMinY) joyMinY = rawY;
+    if (rawY > joyMaxY) joyMaxY = rawY;
 
-  // When joystick neutral, target snaps to hive center (implicit centering!)
-  if (dx == 0) targetWX = 0.0f;
-  if (dy == 0) targetWY = 0.0f;
+    // Deadzone
+    const int dead = 35;
+    int dx = applyDeadzone(rawX, joyCenterX, dead);
+    int dy = applyDeadzone(rawY, joyCenterY, dead);
 
-  // Spring constants (higher = more responsive, boost increases responsiveness)
-  const float springK = boosting ? SPRING_K_BOOST : SPRING_K_NORMAL;
-  const float damping = boosting ? DAMPING_BOOST : DAMPING_NORMAL;
+    // Normalize X
+    float nx = -(float)clampi(dx, -512, 512) / 512.0f;
 
-  // Spring force: F = k * (target - current) - damping * velocity
-  float forceX = springK * (targetWX - beeWX) - damping * beeVX;
-  float forceY = springK * (targetWY - beeWY) - damping * beeVY;
+    // Normalize Y with auto-cal asymmetry
+    int upSpan   = joyCenterY - joyMinY;
+    int downSpan = joyMaxY - joyCenterY;
+    if (upSpan < 1) upSpan = 1;
+    if (downSpan < 1) downSpan = 1;
 
-  beeVX += forceX * dt;
-  beeVY += forceY * dt;
-
-  // Integrate
-  beeWX += beeVX * dt;
-  beeWY += beeVY * dt;
-
-  // Wing animation driven by speed
-  float sp = fabsf(beeVX) + fabsf(beeVY);
-  float spN = clampf(sp / WING_SPEED_DIVISOR, 0.0f, 1.0f);
-  wingSpeed = spN;
-  float hz = 3.0f + 14.0f * wingSpeed;
-  wingPhase += 2.0f * 3.1415926f * hz * dt;
-  if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
-
-  // Boost trail VFX - much more prominent!
-  if (boosting && wingSpeed > 0.2f) {
-    // Spawn trail particles every ~20ms for denser trail
-    static uint32_t lastTrailMs = 0;
-    if ((uint32_t)(now - lastTrailMs) > 20) {
-      // Spawn 2 particles per frame for extra density
-      spawnTrailParticle(beeWX, beeWY, spN, now);
-      spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, spN, now); // slightly offset
-      lastTrailMs = now;
+    float nyRaw;
+    const float DOWN_BOOST = 1.20f;
+    if (dy >= 0) {
+      nyRaw = (float)dy / (float)downSpan;
+      nyRaw *= DOWN_BOOST;
+    } else {
+      nyRaw = (float)dy / (float)upSpan;
     }
-  }
-  updateTrailParticles(now);
-  updateScorePopups(now);
+    nyRaw = clampf(nyRaw, -1.0f, 1.0f);
+    float ny = -nyRaw;
 
-  // Camera zoom + shake response
-  float targetZoom = boosting ? 1.22f : 1.0f;
-  float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
-  cameraZoom += (targetZoom - cameraZoom) * zoomLerp;
+    // Circle->square boost (diagonals)
+    float ax = fabsf(nx);
+    float ay = fabsf(ny);
+    float m  = (ax > ay) ? ax : ay;
+    if (m > 0.0001f) {
+      nx /= m;
+      ny /= m;
+      nx = clampf(nx, -1.0f, 1.0f);
+      ny = clampf(ny, -1.0f, 1.0f);
+    }
 
-  if ((int32_t)(now - cameraShakeUntilMs) < 0 && cameraShakeDurationMs > 0) {
-    float t = (float)(cameraShakeUntilMs - now) / (float)cameraShakeDurationMs;
-    t = clampf(t, 0.0f, 1.0f);
-    float amp = cameraShakeMagnitude * t * t;
-    float phase = (float)now * 0.045f;
-    cameraShakeX = sinf(phase * 6.2f) * amp;
-    cameraShakeY = cosf(phase * 7.4f) * amp;
+    // Determine if boost is active
+    boosting = (int32_t)(now - boostActiveUntilMs) < 0;
+    if (boosting && !wasBoosting) {
+      triggerCameraShake(now, 6.5f, 180);
+    }
+    wasBoosting = boosting;
+
+    // ---- SPRING-BASED MOVEMENT ----
+    // Joystick maps to target position in world space (bounded exploration area)
+    const float roamRadius = BOUNDARY_COMFORTABLE; // max distance from hive
+    float targetWX = nx * roamRadius;
+    float targetWY = ny * roamRadius;
+
+    // When joystick neutral, target snaps to hive center (implicit centering!)
+    if (dx == 0) targetWX = 0.0f;
+    if (dy == 0) targetWY = 0.0f;
+
+    // Spring constants (higher = more responsive, boost increases responsiveness)
+    const float springK = boosting ? SPRING_K_BOOST : SPRING_K_NORMAL;
+    const float damping = boosting ? DAMPING_BOOST : DAMPING_NORMAL;
+
+    // Spring force: F = k * (target - current) - damping * velocity
+    float forceX = springK * (targetWX - beeWX) - damping * beeVX;
+    float forceY = springK * (targetWY - beeWY) - damping * beeVY;
+
+    beeVX += forceX * dt;
+    beeVY += forceY * dt;
+
+    // Integrate
+    beeWX += beeVX * dt;
+    beeWY += beeVY * dt;
+
+    // Wing animation driven by speed
+    float sp = fabsf(beeVX) + fabsf(beeVY);
+    float spN = clampf(sp / WING_SPEED_DIVISOR, 0.0f, 1.0f);
+    wingSpeed = spN;
+    float hz = 3.0f + 14.0f * wingSpeed;
+    wingPhase += 2.0f * 3.1415926f * hz * dt;
+    if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
+
+    // Boost trail VFX - much more prominent!
+    if (boosting && wingSpeed > 0.2f) {
+      // Spawn trail particles every ~20ms for denser trail
+      static uint32_t lastTrailMs = 0;
+      if ((uint32_t)(now - lastTrailMs) > 20) {
+        // Spawn 2 particles per frame for extra density
+        spawnTrailParticle(beeWX, beeWY, spN, now);
+        spawnTrailParticle(beeWX - beeVX * 0.02f, beeWY - beeVY * 0.02f, spN, now); // slightly offset
+        lastTrailMs = now;
+      }
+    }
+    updateTrailParticles(now);
+    updateScorePopups(now);
+
+    // Camera zoom + shake response
+    float targetZoom = boosting ? 1.22f : 1.0f;
+    float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
+    cameraZoom += (targetZoom - cameraZoom) * zoomLerp;
+
+    if ((int32_t)(now - cameraShakeUntilMs) < 0 && cameraShakeDurationMs > 0) {
+      float t = (float)(cameraShakeUntilMs - now) / (float)cameraShakeDurationMs;
+      t = clampf(t, 0.0f, 1.0f);
+      float amp = cameraShakeMagnitude * t * t;
+      float phase = (float)now * 0.045f;
+      cameraShakeX = sinf(phase * 6.2f) * amp;
+      cameraShakeY = cosf(phase * 7.4f) * amp;
+    } else {
+      cameraShakeX = 0.0f;
+      cameraShakeY = 0.0f;
+    }
   } else {
+    wasBoosting = false;
+    beeWX = 0.0f;
+    beeWY = 0.0f;
+    beeVX = 0.0f;
+    beeVY = 0.0f;
+    wingSpeed = 0.0f;
+    float zoomLerp = clampf(7.0f * dt, 0.0f, 1.0f);
+    cameraZoom += (1.0f - cameraZoom) * zoomLerp;
     cameraShakeX = 0.0f;
     cameraShakeY = 0.0f;
+    updateBeltLifetimes(now);
+    updateUnload(now);
+    updateTrailParticles(now);
+    updateScorePopups(now);
   }
 
   // Survival timer countdown
@@ -1763,13 +1897,21 @@ void loop() {
       // Stop all sounds immediately!
       noTone(PIN_BUZZ);
       sndMode = SND_IDLE;
+      isUnloading = false;
+      unloadRemaining = 0;
+      unloadTotal = 0;
     }
   }
 
   // --- Button handling ---
-  bool b = joyPressedRaw();
-  bool edgeDown = (b && !btnPrev);
-  btnPrev = b;
+  bool edgeDown = false;
+  if (!isUnloading) {
+    bool b = joyPressedRaw();
+    edgeDown = (b && !btnPrev);
+    btnPrev = b;
+  } else {
+    btnPrev = false;
+  }
 
   // Game over restart on button press
   if (isGameOver && edgeDown) {
@@ -1782,6 +1924,9 @@ void loop() {
     isGameOver = false;
     pollenCount = 0;
     score = 0;
+    isUnloading = false;
+    unloadRemaining = 0;
+    unloadTotal = 0;
     initFlowers();
     hivePulseUntilMs = 0;
     // Clear trail
@@ -1792,7 +1937,7 @@ void loop() {
 
   // Don't process normal game input during game over
   // But DO continue to render!
-  if (!isGameOver) {
+  if (!isGameOver && !isUnloading) {
 
     if (edgeDown) {
       // Click always gives some percussive feedback.
@@ -1824,7 +1969,7 @@ void loop() {
   // Render at a stable cadence
   static uint32_t lastRenderMs = 0;
   uint32_t renderInterval = 40;
-  bool idle = !isGameOver && !radarActive && !boosting && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive() && !anyScorePopupAlive();
+  bool idle = !isGameOver && !isUnloading && !radarActive && !boosting && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive() && !anyScorePopupAlive();
   if (idle) renderInterval = 80; // ease CPU/GPU when calm
   if ((uint32_t)(now - lastRenderMs) >= renderInterval) {
     lastRenderMs = now;
