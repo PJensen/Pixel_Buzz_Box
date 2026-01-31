@@ -264,10 +264,16 @@ static TrailParticle trail[TRAIL_MAX];
 static int trailNextIdx = 0;
 
 // -------------------- SURVIVAL TIMER --------------------
-static const float SURVIVAL_TIME_MAX = 30.0f; // seconds
+static const float SURVIVAL_TIME_MAX = 15.0f; // seconds
+static const float SURVIVAL_POLLEN_BASE = 0.65f; // seconds per pollen tick (before multiplier)
+static const float SURVIVAL_POLLEN_MULT_STEP = 0.55f; // bonus multiplier per tick in a multi-unload
+static const uint32_t SURVIVAL_FLASH_MS = 140;
 static float survivalTimeLeft = SURVIVAL_TIME_MAX;
 static bool isGameOver = false;
 static uint32_t gameOverMs = 0;
+static uint32_t survivalFlashUntilMs = 0;
+static float survivalFlashStartPct = 0.0f;
+static float survivalFlashEndPct = 0.0f;
 
 // -------------------- HIVE DROP-OFF VFX --------------------
 static uint32_t hivePulseUntilMs = 0;
@@ -1318,6 +1324,17 @@ static void drawSurvivalBar(Adafruit_GFX &g, int ox, int oy) {
     g.fillRect(x0 + ox, y0 + oy, fillW, barH, fillColor);
   }
 
+  // Flash only the portion added by pollen
+  if ((int32_t)(millis() - survivalFlashUntilMs) < 0) {
+    int startW = (int)(survivalFlashStartPct * (float)barW);
+    int endW = (int)(survivalFlashEndPct * (float)barW);
+    if (endW > startW) {
+      int fx = x0 + startW;
+      int fw = endW - startW;
+      g.fillRect(fx + ox, y0 + oy, fw, barH, COL_POLLEN_HI);
+    }
+  }
+
   // Flash if critical
   if (pct <= 0.20f && (millis() % 400) < 200) {
     g.drawRect(x0 + ox, y0 + oy, barW, barH, COL_UI_WARN);
@@ -1556,6 +1573,14 @@ static void updateUnload(uint32_t nowMs) {
     score = (uint16_t)(score + 1);
     spawnBeltItem(nowMs);
     hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
+    float tickMult = 1.0f + (float)stepIndex * SURVIVAL_POLLEN_MULT_STEP;
+    float gain = SURVIVAL_POLLEN_BASE * tickMult;
+    float before = survivalTimeLeft;
+    float after = clampf(survivalTimeLeft + gain, 0.0f, SURVIVAL_TIME_MAX);
+    survivalTimeLeft = after;
+    survivalFlashStartPct = clampf(before / SURVIVAL_TIME_MAX, 0.0f, 1.0f);
+    survivalFlashEndPct = clampf(after / SURVIVAL_TIME_MAX, 0.0f, 1.0f);
+    survivalFlashUntilMs = nowMs + SURVIVAL_FLASH_MS;
     unloadNextMs = nowMs + UNLOAD_TICK_MS;
     return;
   }
@@ -1568,7 +1593,6 @@ static void updateUnload(uint32_t nowMs) {
     spawnScorePopup(nowMs, unloadTotal, hiveSX, hiveSY);
   }
   unloadTotal = 0;
-  survivalTimeLeft = SURVIVAL_TIME_MAX;
 }
 
 static void tryStoreAtHive(uint32_t nowMs) {
