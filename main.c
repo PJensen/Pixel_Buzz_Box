@@ -185,8 +185,8 @@
   static const int HUD_H = 28;
   static const uint8_t MAX_POLLEN_CARRY = 8;
   static const uint32_t UNLOAD_TICK_MS = 100;
-  static const uint16_t UNLOAD_CHIRP_BASE = 580;
-  static const uint16_t UNLOAD_CHIRP_STEP = 70;
+  static const uint16_t UNLOAD_CHIRP_BASE = 760;
+  static const uint16_t UNLOAD_CHIRP_STEP = 90;
   static const uint16_t UNLOAD_CHIRP_MS = 55;
 
   // -------------------- CANVAS (micro-tiles) --------------------
@@ -227,29 +227,57 @@
   static const uint32_t BELT_LIFE_MS = 14000;
 
   // -------------------- SOUND SCHEDULER --------------------
-  static SndMode sndMode = SND_IDLE;
-  static uint8_t sndStep = 0;
-  static uint32_t sndNextMs = 0;
-  static float sndLastEventFreq = 0.0f;
-  static uint32_t sndEventTailUntilMs = 0;
-  static uint32_t sndEventTailStartMs = 0;
-  static float sndEventTailFreq = 0.0f;
-  static float sndAmbientFreqSmooth = 0.0f;
-  static float sndAmbientEnv = 0.0f;
-  static float sndPrevVX = 0.0f;
-  static float sndPrevVY = 0.0f;
-  static float sndHeading = 0.0f;
-  static float sndTurnRateSmooth = 0.0f;
-  static float sndAccelSmooth = 0.0f;
-  static float sndRadialAccelSmooth = 0.0f;
-  static float sndVibratoPhase = 0.0f;
-  static uint32_t sndSwishUntilMs = 0;
-  static uint32_t sndSwishStartMs = 0;
-  static float sndSwishSign = 0.0f;
-  static uint32_t sndAccelPulseUntilMs = 0;
-  static uint32_t sndAccelPulseStartMs = 0;
-  static float sndAccelPulseStrength = 0.0f;
-  static float sndLastUnloadFreq = 0.0f;
+  struct SoundState {
+    SndMode mode;
+    uint8_t step;
+    uint32_t nextMs;
+    float lastEventFreq;
+    uint32_t eventTailUntilMs;
+    uint32_t eventTailStartMs;
+    float eventTailFreq;
+    float ambientFreqSmooth;
+    float ambientEnv;
+    float prevVX;
+    float prevVY;
+    float heading;
+    float turnRateSmooth;
+    float accelSmooth;
+    float radialAccelSmooth;
+    float vibratoPhase;
+    uint32_t swishUntilMs;
+    uint32_t swishStartMs;
+    float swishSign;
+    uint32_t accelPulseUntilMs;
+    uint32_t accelPulseStartMs;
+    float accelPulseStrength;
+    float lastUnloadFreq;
+  };
+
+  static SoundState snd = {
+    SND_IDLE,
+    0,
+    0,
+    0.0f,
+    0,
+    0,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0f,
+    0,
+    0,
+    0.0f,
+    0,
+    0,
+    0.0f,
+    0.0f
+  };
 
   // -------------------- BOOST --------------------
   static uint8_t depositsTowardBoost = 0;
@@ -523,118 +551,118 @@
 
   // Sound functions
   static void startSound(SndMode m, uint32_t nowMs) {
-    sndMode = m;
-    sndStep = 0;
-    sndNextMs = nowMs;
-    sndEventTailUntilMs = 0;
+    snd.mode = m;
+    snd.step = 0;
+    snd.nextMs = nowMs;
+    snd.eventTailUntilMs = 0;
   }
 
   static void updateSound(uint32_t nowMs) {
-    if (sndMode == SND_IDLE) return;
-    if ((int32_t)(nowMs - sndNextMs) < 0) return;
+    if (snd.mode == SND_IDLE) return;
+    if ((int32_t)(nowMs - snd.nextMs) < 0) return;
 
-    switch (sndMode) {
+    switch (snd.mode) {
       case SND_CLICK:
-        if (sndStep == 0) {
-          sndLastEventFreq = 1500.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 18);
-          sndNextMs = nowMs + 22;
-          sndStep++;
+        if (snd.step == 0) {
+          snd.lastEventFreq = 1800.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 18);
+          snd.nextMs = nowMs + 22;
+          snd.step++;
         } else {
           noTone(PIN_BUZZ);
-          sndEventTailFreq = sndLastEventFreq;
-          sndEventTailStartMs = nowMs;
-          sndEventTailUntilMs = nowMs + 110;
-          sndMode = SND_IDLE;
+          snd.eventTailFreq = snd.lastEventFreq;
+          snd.eventTailStartMs = nowMs;
+          snd.eventTailUntilMs = nowMs + 110;
+          snd.mode = SND_IDLE;
         }
         break;
 
       case SND_RADAR:
         // percussive tick + two pips
-        if (sndStep == 0) {
-          sndLastEventFreq = 1200.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 14);
-          sndNextMs = nowMs + 18;
-          sndStep++;
-        } else if (sndStep == 1) {
-          sndLastEventFreq = 760.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 50);
-          sndNextMs = nowMs + 60;
-          sndStep++;
-        } else if (sndStep == 2) {
-          sndLastEventFreq = 980.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
-          sndNextMs = nowMs + 70;
-          sndStep++;
+        if (snd.step == 0) {
+          snd.lastEventFreq = 1500.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 14);
+          snd.nextMs = nowMs + 18;
+          snd.step++;
+        } else if (snd.step == 1) {
+          snd.lastEventFreq = 980.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 50);
+          snd.nextMs = nowMs + 60;
+          snd.step++;
+        } else if (snd.step == 2) {
+          snd.lastEventFreq = 1220.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 55);
+          snd.nextMs = nowMs + 70;
+          snd.step++;
         } else {
           noTone(PIN_BUZZ);
-          sndEventTailFreq = sndLastEventFreq;
-          sndEventTailStartMs = nowMs;
-          sndEventTailUntilMs = nowMs + 140;
-          sndMode = SND_IDLE;
+          snd.eventTailFreq = snd.lastEventFreq;
+          snd.eventTailStartMs = nowMs;
+          snd.eventTailUntilMs = nowMs + 140;
+          snd.mode = SND_IDLE;
         }
         break;
 
       case SND_POLLEN_CHIRP:
-        if (sndStep == 0) {
-          sndLastEventFreq = 720.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
-          sndNextMs = nowMs + 65;
-          sndStep++;
-        } else if (sndStep == 1) {
-          sndLastEventFreq = 880.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 55);
-          sndNextMs = nowMs + 65;
-          sndStep++;
-        } else if (sndStep == 2) {
-          sndLastEventFreq = 620.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 80);
-          sndNextMs = nowMs + 95;
-          sndStep++;
+        if (snd.step == 0) {
+          snd.lastEventFreq = 940.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 55);
+          snd.nextMs = nowMs + 65;
+          snd.step++;
+        } else if (snd.step == 1) {
+          snd.lastEventFreq = 1160.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 55);
+          snd.nextMs = nowMs + 65;
+          snd.step++;
+        } else if (snd.step == 2) {
+          snd.lastEventFreq = 860.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 80);
+          snd.nextMs = nowMs + 95;
+          snd.step++;
         } else {
           noTone(PIN_BUZZ);
-          sndEventTailFreq = sndLastEventFreq;
-          sndEventTailStartMs = nowMs;
-          sndEventTailUntilMs = nowMs + 130;
-          sndMode = SND_IDLE;
+          snd.eventTailFreq = snd.lastEventFreq;
+          snd.eventTailStartMs = nowMs;
+          snd.eventTailUntilMs = nowMs + 130;
+          snd.mode = SND_IDLE;
         }
         break;
 
       case SND_POWERUP:
         // short rising arpeggio
-        if (sndStep == 0) {
-          sndLastEventFreq = 520.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 70);
-          sndNextMs = nowMs + 78;
-          sndStep++;
-        } else if (sndStep == 1) {
-          sndLastEventFreq = 760.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 70);
-          sndNextMs = nowMs + 78;
-          sndStep++;
-        } else if (sndStep == 2) {
-          sndLastEventFreq = 1040.0f;
-          tone(PIN_BUZZ, (uint16_t)sndLastEventFreq, 90);
-          sndNextMs = nowMs + 105;
-          sndStep++;
+        if (snd.step == 0) {
+          snd.lastEventFreq = 780.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 70);
+          snd.nextMs = nowMs + 78;
+          snd.step++;
+        } else if (snd.step == 1) {
+          snd.lastEventFreq = 1080.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 70);
+          snd.nextMs = nowMs + 78;
+          snd.step++;
+        } else if (snd.step == 2) {
+          snd.lastEventFreq = 1420.0f;
+          tone(PIN_BUZZ, (uint16_t)snd.lastEventFreq, 90);
+          snd.nextMs = nowMs + 105;
+          snd.step++;
         } else {
           noTone(PIN_BUZZ);
-          sndEventTailFreq = sndLastEventFreq;
-          sndEventTailStartMs = nowMs;
-          sndEventTailUntilMs = nowMs + 160;
-          sndMode = SND_IDLE;
+          snd.eventTailFreq = snd.lastEventFreq;
+          snd.eventTailStartMs = nowMs;
+          snd.eventTailUntilMs = nowMs + 160;
+          snd.mode = SND_IDLE;
         }
         break;
 
       default:
-        sndMode = SND_IDLE;
+        snd.mode = SND_IDLE;
         noTone(PIN_BUZZ);
         break;
     }
   }
 
   static bool soundBusy() {
-    return sndMode != SND_IDLE;
+    return snd.mode != SND_IDLE;
   }
 
   // -------------------- WORLD HELPERS --------------------
@@ -1624,7 +1652,7 @@
     unloadTotal = pollenCount;
     unloadNextMs = nowMs;
     noTone(PIN_BUZZ);
-    sndMode = SND_IDLE;
+    snd.mode = SND_IDLE;
   }
 
   static void updateUnload(uint32_t nowMs) {
@@ -1634,7 +1662,7 @@
     if (unloadRemaining > 0) {
       uint8_t stepIndex = (uint8_t)(unloadTotal - unloadRemaining);
       uint16_t freq = (uint16_t)(UNLOAD_CHIRP_BASE + (uint16_t)stepIndex * UNLOAD_CHIRP_STEP);
-      sndLastUnloadFreq = (float)freq;
+      snd.lastUnloadFreq = (float)freq;
       tone(PIN_BUZZ, freq, UNLOAD_CHIRP_MS);
       unloadRemaining--;
       pollenCount = unloadRemaining;
@@ -1655,10 +1683,10 @@
 
     isUnloading = false;
     unloadRemaining = 0;
-    if (sndLastUnloadFreq > 0.0f) {
-      sndEventTailFreq = sndLastUnloadFreq;
-      sndEventTailStartMs = nowMs;
-      sndEventTailUntilMs = nowMs + 140;
+    if (snd.lastUnloadFreq > 0.0f) {
+      snd.eventTailFreq = snd.lastUnloadFreq;
+      snd.eventTailStartMs = nowMs;
+      snd.eventTailUntilMs = nowMs + 140;
     }
     if (unloadTotal > 0) {
       int hiveSX, hiveSY;
@@ -1939,16 +1967,16 @@
 
       // Sound dynamics: heading/turn rate + acceleration for buzzer modulation
       float speed = sqrtf(beeVX * beeVX + beeVY * beeVY);
-      float heading = sndHeading;
+      float heading = snd.heading;
       if (speed > 0.02f) heading = atan2f(beeVY, beeVX);
-      float dHeading = heading - sndHeading;
+      float dHeading = heading - snd.heading;
       while (dHeading > 3.1415926f) dHeading -= 6.2831853f;
       while (dHeading < -3.1415926f) dHeading += 6.2831853f;
       float turnRate = (dt > 0.0001f) ? (dHeading / dt) : 0.0f;
-      sndHeading = heading;
+      snd.heading = heading;
 
-      float dvx = beeVX - sndPrevVX;
-      float dvy = beeVY - sndPrevVY;
+      float dvx = beeVX - snd.prevVX;
+      float dvy = beeVY - snd.prevVY;
       float accelMag = (dt > 0.0001f) ? (sqrtf(dvx * dvx + dvy * dvy) / dt) : 0.0f;
       float accelAlong = 0.0f;
       if (speed > 0.02f && dt > 0.0001f) {
@@ -1956,25 +1984,25 @@
       }
 
       float smoothRate = clampf(6.0f * dt, 0.0f, 1.0f);
-      sndTurnRateSmooth += (turnRate - sndTurnRateSmooth) * smoothRate;
-      sndAccelSmooth += (accelMag - sndAccelSmooth) * clampf(4.0f * dt, 0.0f, 1.0f);
-      sndRadialAccelSmooth += (accelAlong - sndRadialAccelSmooth) * clampf(5.0f * dt, 0.0f, 1.0f);
+      snd.turnRateSmooth += (turnRate - snd.turnRateSmooth) * smoothRate;
+      snd.accelSmooth += (accelMag - snd.accelSmooth) * clampf(4.0f * dt, 0.0f, 1.0f);
+      snd.radialAccelSmooth += (accelAlong - snd.radialAccelSmooth) * clampf(5.0f * dt, 0.0f, 1.0f);
 
-      if (fabsf(turnRate) > 3.2f && (int32_t)(now - sndSwishUntilMs) > 0) {
-        sndSwishStartMs = now;
-        sndSwishUntilMs = now + 120;
-        sndSwishSign = (turnRate >= 0.0f) ? 1.0f : -1.0f;
+      if (fabsf(turnRate) > 3.2f && (int32_t)(now - snd.swishUntilMs) > 0) {
+        snd.swishStartMs = now;
+        snd.swishUntilMs = now + 120;
+        snd.swishSign = (turnRate >= 0.0f) ? 1.0f : -1.0f;
       }
 
       float accelN = clampf(accelMag / 420.0f, 0.0f, 1.0f);
-      if (accelN > 0.35f && (int32_t)(now - sndAccelPulseUntilMs) > 0) {
-        sndAccelPulseStartMs = now;
-        sndAccelPulseUntilMs = now + 140;
-        sndAccelPulseStrength = accelN;
+      if (accelN > 0.35f && (int32_t)(now - snd.accelPulseUntilMs) > 0) {
+        snd.accelPulseStartMs = now;
+        snd.accelPulseUntilMs = now + 140;
+        snd.accelPulseStrength = accelN;
       }
 
-      sndPrevVX = beeVX;
-      sndPrevVY = beeVY;
+      snd.prevVX = beeVX;
+      snd.prevVY = beeVY;
 
       // Boost trail VFX - much more prominent!
       if (boosting && wingSpeed > 0.2f) {
@@ -2032,10 +2060,11 @@
         gameOverMs = now;
         // Stop all sounds immediately!
         noTone(PIN_BUZZ);
-        sndMode = SND_IDLE;
-        sndEventTailUntilMs = 0;
-        sndAmbientEnv = 0.0f;
-        sndAmbientFreqSmooth = 0.0f;
+        snd.mode = SND_IDLE;
+        snd.eventTailUntilMs = 0;
+        snd.ambientEnv = 0.0f;
+        snd.ambientFreqSmooth = 0.0f;
+        snd.lastUnloadFreq = 0.0f;
         isUnloading = false;
         unloadRemaining = 0;
         unloadTotal = 0;
@@ -2059,15 +2088,16 @@
       beeWY = 0.0f;
       beeVX = 0.0f;
       beeVY = 0.0f;
-      sndPrevVX = 0.0f;
-      sndPrevVY = 0.0f;
-      sndHeading = 0.0f;
-      sndTurnRateSmooth = 0.0f;
-      sndAccelSmooth = 0.0f;
-      sndRadialAccelSmooth = 0.0f;
-      sndEventTailUntilMs = 0;
-      sndAmbientEnv = 0.0f;
-      sndAmbientFreqSmooth = 0.0f;
+      snd.prevVX = 0.0f;
+      snd.prevVY = 0.0f;
+      snd.heading = 0.0f;
+      snd.turnRateSmooth = 0.0f;
+      snd.accelSmooth = 0.0f;
+      snd.radialAccelSmooth = 0.0f;
+      snd.eventTailUntilMs = 0;
+      snd.ambientEnv = 0.0f;
+      snd.ambientFreqSmooth = 0.0f;
+      snd.lastUnloadFreq = 0.0f;
       survivalTimeLeft = SURVIVAL_TIME_MAX;
       isGameOver = false;
       pollenCount = 0;
@@ -2101,53 +2131,53 @@
 
       // Sound: ambient wing buzz (only when no event sounds active) - stops when bee stops!
       if (!soundBusy()) {
-        bool tailActive = (int32_t)(now - sndEventTailUntilMs) < 0;
+        bool tailActive = (int32_t)(now - snd.eventTailUntilMs) < 0;
         float envTarget = (wingSpeed > 0.05f || tailActive) ? 1.0f : 0.0f;
-        float envRate = (envTarget > sndAmbientEnv) ? 8.0f : 4.0f;
-        sndAmbientEnv += (envTarget - sndAmbientEnv) * clampf(envRate * dt, 0.0f, 1.0f);
+        float envRate = (envTarget > snd.ambientEnv) ? 8.0f : 4.0f;
+        snd.ambientEnv += (envTarget - snd.ambientEnv) * clampf(envRate * dt, 0.0f, 1.0f);
 
-        float base = 110.0f + wingSpeed * 320.0f;
+        float base = 220.0f + wingSpeed * 520.0f;
         uint32_t jitterSeed = hash32((uint32_t)(now >> 2) + 0x5f3759dfu);
-        float jitter = ((int)(jitterSeed & 0x7u) - 3) * 1.6f;
+        float jitter = ((int)(jitterSeed & 0x7u) - 3) * 2.2f;
 
-        float turnSkew = clampf(sndTurnRateSmooth * 0.75f, -16.0f, 16.0f);
-        float doppler = clampf(sndRadialAccelSmooth * 0.045f, -14.0f, 14.0f);
+        float turnSkew = clampf(snd.turnRateSmooth * 0.75f, -22.0f, 22.0f);
+        float doppler = clampf(snd.radialAccelSmooth * 0.06f, -22.0f, 22.0f);
 
-        float vibRate = 6.5f + clampf(fabsf(sndTurnRateSmooth) * 0.12f, 0.0f, 6.0f);
-        float vibDepth = 2.5f + wingSpeed * 6.0f
-          + clampf(sndAccelSmooth * 0.035f, 0.0f, 8.0f)
-          + clampf(fabsf(sndTurnRateSmooth) * 0.18f, 0.0f, 5.0f);
-        sndVibratoPhase += 6.2831853f * vibRate * dt;
-        float vib = sinf(sndVibratoPhase) * vibDepth;
+        float vibRate = 7.5f + clampf(fabsf(snd.turnRateSmooth) * 0.14f, 0.0f, 6.5f);
+        float vibDepth = 3.5f + wingSpeed * 8.0f
+          + clampf(snd.accelSmooth * 0.045f, 0.0f, 10.0f)
+          + clampf(fabsf(snd.turnRateSmooth) * 0.22f, 0.0f, 7.0f);
+        snd.vibratoPhase += 6.2831853f * vibRate * dt;
+        float vib = sinf(snd.vibratoPhase) * vibDepth;
 
         float swish = 0.0f;
-        if ((int32_t)(now - sndSwishUntilMs) < 0) {
-          float t = (float)(now - sndSwishStartMs) / (float)(sndSwishUntilMs - sndSwishStartMs);
+        if ((int32_t)(now - snd.swishUntilMs) < 0) {
+          float t = (float)(now - snd.swishStartMs) / (float)(snd.swishUntilMs - snd.swishStartMs);
           t = clampf(t, 0.0f, 1.0f);
           float env = 1.0f - fabsf(1.0f - 2.0f * t);
-          swish = sndSwishSign * 12.0f * env;
+          swish = snd.swishSign * 18.0f * env;
         }
 
         float accelPulse = 0.0f;
-        if ((int32_t)(now - sndAccelPulseUntilMs) < 0) {
-          float t = (float)(now - sndAccelPulseStartMs) / (float)(sndAccelPulseUntilMs - sndAccelPulseStartMs);
+        if ((int32_t)(now - snd.accelPulseUntilMs) < 0) {
+          float t = (float)(now - snd.accelPulseStartMs) / (float)(snd.accelPulseUntilMs - snd.accelPulseStartMs);
           t = clampf(t, 0.0f, 1.0f);
           float env = 1.0f - t;
-          accelPulse = sndAccelPulseStrength * 14.0f * env;
+          accelPulse = snd.accelPulseStrength * 20.0f * env;
         }
 
         float target = base + jitter + turnSkew + doppler + vib + swish + accelPulse;
 
-        if (tailActive && sndEventTailUntilMs > sndEventTailStartMs) {
-          float t = (float)(now - sndEventTailStartMs) / (float)(sndEventTailUntilMs - sndEventTailStartMs);
+        if (tailActive && snd.eventTailUntilMs > snd.eventTailStartMs) {
+          float t = (float)(now - snd.eventTailStartMs) / (float)(snd.eventTailUntilMs - snd.eventTailStartMs);
           t = clampf(t, 0.0f, 1.0f);
           float blend = t * t;
-          target = sndEventTailFreq * (1.0f - blend) + target * blend;
+          target = snd.eventTailFreq * (1.0f - blend) + target * blend;
         }
 
-        sndAmbientFreqSmooth += (target - sndAmbientFreqSmooth) * clampf(10.0f * dt, 0.0f, 1.0f);
-        if (sndAmbientEnv > 0.05f) {
-          int freq = clampi((int)(sndAmbientFreqSmooth), 80, 620);
+        snd.ambientFreqSmooth += (target - snd.ambientFreqSmooth) * clampf(10.0f * dt, 0.0f, 1.0f);
+        if (snd.ambientEnv > 0.05f) {
+          int freq = clampi((int)(snd.ambientFreqSmooth), 180, 980);
           tone(PIN_BUZZ, (uint16_t)freq);
         } else {
           noTone(PIN_BUZZ);
