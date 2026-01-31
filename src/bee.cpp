@@ -44,8 +44,13 @@ void updateBeePhysics(float nx, float ny, int rawDx, int rawDy, float dt, bool b
   if (rawDy == 0) targetWY = 0.0f;
 
   // Spring constants (higher = more responsive)
-  const float springK = boosting ? SPRING_K_BOOST : SPRING_K_NORMAL;
-  const float damping = boosting ? DAMPING_BOOST : DAMPING_NORMAL;
+  float springK = boosting ? SPRING_K_BOOST : SPRING_K_NORMAL;
+  float damping = boosting ? DAMPING_BOOST : DAMPING_NORMAL;
+
+  // Carry weight penalty: heavier pollen loads feel less agile.
+  float load = clampf((float)pollenCount / (float)MAX_POLLEN_CARRY, 0.0f, 1.0f);
+  springK *= (1.0f - CARRY_WEIGHT_SPRING_PENALTY * load);
+  damping *= (1.0f + CARRY_WEIGHT_DAMPING_PENALTY * load);
 
   // Spring force: F = k * (target - current) - damping * velocity
   float forceX = springK * (targetWX - beeWX) - damping * beeVX;
