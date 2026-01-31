@@ -191,6 +191,19 @@ static uint32_t gameOverMs = 0;
 static uint32_t hivePulseUntilMs = 0;
 static const uint32_t HIVE_PULSE_MS = 520;
 
+// -------------------- SCORE POPUP VFX --------------------
+struct ScorePopup {
+  uint32_t bornMs;
+  int16_t baseSX;
+  int16_t baseSY;
+  int8_t driftX;
+  uint8_t value;
+  uint8_t alive;
+};
+static const int SCORE_POPUP_N = 6;
+static const uint32_t SCORE_POPUP_LIFE_MS = 1100;
+static ScorePopup scorePopups[SCORE_POPUP_N];
+
 // -------------------- WORLD CONSTRAINTS --------------------
 // Spring-based exploration area - joystick maps to target within this radius
 static const float BOUNDARY_COMFORTABLE = 180.0f; // max exploration radius from hive
@@ -690,6 +703,100 @@ static void drawHivePulse(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
   g.drawCircle(x, y, r + 4, c2);
   if ((nowMs & 0x3u) == 0u) {
     g.drawCircle(x, y, r - 2, COL_WHITE);
+  }
+}
+
+static void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy) {
+  int freeIdx = -1;
+  uint32_t oldest = 0xFFFFFFFFu;
+  int oldestIdx = 0;
+
+  for (int i = 0; i < SCORE_POPUP_N; i++) {
+    if (!scorePopups[i].alive) { freeIdx = i; break; }
+    if (scorePopups[i].bornMs < oldest) { oldest = scorePopups[i].bornMs; oldestIdx = i; }
+  }
+
+  int idx = (freeIdx >= 0) ? freeIdx : oldestIdx;
+  scorePopups[idx].alive = 1;
+  scorePopups[idx].bornMs = nowMs;
+  scorePopups[idx].value = value;
+  scorePopups[idx].baseSX = (int16_t)sx;
+  scorePopups[idx].baseSY = (int16_t)sy;
+  scorePopups[idx].driftX = (int8_t)irand(-10, 10);
+}
+
+static void updateScorePopups(uint32_t nowMs) {
+  for (int i = 0; i < SCORE_POPUP_N; i++) {
+    if (!scorePopups[i].alive) continue;
+    if ((uint32_t)(nowMs - scorePopups[i].bornMs) > SCORE_POPUP_LIFE_MS) {
+      scorePopups[i].alive = 0;
+    }
+  }
+}
+
+static void drawScorePopups(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  char buf[8];
+  for (int i = 0; i < SCORE_POPUP_N; i++) {
+    if (!scorePopups[i].alive) continue;
+    uint32_t age = nowMs - scorePopups[i].bornMs;
+    if (age > SCORE_POPUP_LIFE_MS) continue;
+
+    float t = (float)age / (float)SCORE_POPUP_LIFE_MS;
+    t = clampf(t, 0.0f, 1.0f);
+
+    // Ease-out float with slight sideways sway
+    float u = 1.0f - (1.0f - t) * (1.0f - t);
+    int floatY = (int)(28.0f * u);
+    int sway = (int)(sinf((float)age * 0.018f + (float)scorePopups[i].driftX) * 2.0f);
+
+    int cx = (int)scorePopups[i].baseSX + scorePopups[i].driftX + sway;
+    int cy = (int)scorePopups[i].baseSY - 6 - floatY;
+
+    int size;
+    if (t < 0.18f) size = 1;
+    else if (t < 0.72f) size = 2;
+    else size = 3; // pulse at the end
+
+    snprintf(buf, sizeof(buf), "+%d", (int)scorePopups[i].value);
+    int len = (int)strlen(buf);
+    int textW = len * 6 * size;
+    int textH = 8 * size;
+    int x0 = cx - textW / 2;
+    int y0 = cy - textH / 2;
+    int x1 = x0 + textW - 1;
+    int y1 = y0 + textH - 1;
+
+    // Draw only if this tile overlaps text rect
+    int tx0 = -ox;
+    int ty0 = -oy;
+    int tx1 = tx0 + CANVAS_W - 1;
+    int ty1 = ty0 + CANVAS_H - 1;
+    if (x1 < tx0 || x0 > tx1 || y1 < ty0 || y0 > ty1) continue;
+
+    g.setTextWrap(false);
+    g.setTextSize(size);
+
+    // Shadow for readability
+    g.setTextColor(COL_SHADOW);
+    g.setCursor(x0 + 1 + ox, y0 + 1 + oy);
+    g.print(buf);
+
+    // Main color (yellow)
+    uint16_t mainCol = (t > 0.75f) ? COL_POLLEN_HI : COL_YEL;
+    g.setTextColor(mainCol);
+    g.setCursor(x0 + ox, y0 + oy);
+    g.print(buf);
+
+    // Pulse glow near the end
+    if (t > 0.72f) {
+      g.setTextColor(COL_WHITE);
+      g.setCursor(x0 - 1 + ox, y0 + oy);
+      g.print(buf);
+      g.setCursor(x0 + 1 + ox, y0 - 1 + oy);
+      g.print(buf);
+    }
+
+    g.setTextWrap(true);
   }
 }
 
@@ -1305,6 +1412,9 @@ static void tryStoreAtHive(uint32_t nowMs) {
     score++;
     spawnBeltItem(nowMs);
     hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
+    int hiveSX, hiveSY;
+    worldToScreen(0, 0, hiveSX, hiveSY);
+    spawnScorePopup(nowMs, 1, hiveSX, hiveSY);
 
     // Reset survival timer on successful delivery!
     survivalTimeLeft = SURVIVAL_TIME_MAX;
@@ -1322,6 +1432,13 @@ static bool anyTrailAlive() {
 static bool anyBeltAlive() {
   for (int i = 0; i < BELT_ITEM_N; i++) {
     if (beltItems[i].alive) return true;
+  }
+  return false;
+}
+
+static bool anyScorePopupAlive() {
+  for (int i = 0; i < SCORE_POPUP_N; i++) {
+    if (scorePopups[i].alive) return true;
   }
   return false;
 }
@@ -1383,6 +1500,7 @@ static void renderFrame(uint32_t nowMs) {
       drawBeeShadow(canvas, bcX + ox, bcY + oy + bob);
       drawBee(canvas, bcX + ox, bcY + oy + bob);
       drawPollenSparkles(canvas, bcX + ox, bcY + oy + bob, nowMs);
+      drawScorePopups(canvas, ox, oy, nowMs);
 
       // radar overlay (screen-space)
       drawRadarOverlay(canvas, ox, oy, nowMs);
@@ -1437,6 +1555,7 @@ void setup() {
 
   for (int i = 0; i < BELT_ITEM_N; i++) beltItems[i].alive = 0;
   for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
+  for (int i = 0; i < SCORE_POPUP_N; i++) scorePopups[i].alive = 0;
 
   initFlowers();
 
@@ -1565,6 +1684,7 @@ void loop() {
     }
   }
   updateTrailParticles(now);
+  updateScorePopups(now);
 
   // Camera zoom + shake response
   float targetZoom = boosting ? 1.22f : 1.0f;
@@ -1616,6 +1736,7 @@ void loop() {
     hivePulseUntilMs = 0;
     // Clear trail
     for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
+    for (int i = 0; i < SCORE_POPUP_N; i++) scorePopups[i].alive = 0;
     // Continue to render the reset state
   }
 
@@ -1653,7 +1774,7 @@ void loop() {
   // Render at a stable cadence
   static uint32_t lastRenderMs = 0;
   uint32_t renderInterval = 40;
-  bool idle = !isGameOver && !radarActive && !boosting && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive();
+  bool idle = !isGameOver && !radarActive && !boosting && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive() && !anyScorePopupAlive();
   if (idle) renderInterval = 80; // ease CPU/GPU when calm
   if ((uint32_t)(now - lastRenderMs) >= renderInterval) {
     lastRenderMs = now;
