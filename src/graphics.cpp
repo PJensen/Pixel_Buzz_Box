@@ -1,6 +1,7 @@
 // Pixel Buzz Box - Graphics and Rendering
 #include "game.h"
 #include <math.h>
+#include <stdio.h>
 
 // -------------------- DRAWING PRIMITIVES --------------------
 static void drawBoostAura(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
@@ -476,12 +477,6 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
 
   if (tileY != 0) return;
 
-  g.setCursor(6 + ox, 6 + oy);
-  g.setTextColor(COL_WHITE);
-  g.setTextSize(2);
-  g.print("POLLEN ");
-  g.print(score);
-
   g.setTextSize(1);
   g.setCursor(6 + ox, 20 + oy);
   g.setTextColor(pollenCount ? COL_YEL : COL_UI_DIM);
@@ -674,19 +669,29 @@ static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
 
   g.setTextSize(3);
   g.setTextColor(COL_WHITE);
-  g.setCursor(panelX + panelW / 2 - 30 + ox, panelY + 38 + oy);
-  g.print(score);
+  char scoreText[12];
+  snprintf(scoreText, sizeof(scoreText), "%d", score);
+  int scoreW = (int)strlen(scoreText) * 18;
+  int scoreX = panelX + (panelW - scoreW) / 2;
+  g.setCursor(scoreX + ox, panelY + 38 + oy);
+  g.print(scoreText);
 
   g.setTextSize(1);
   g.setTextColor(COL_UI_DIM);
-  g.setCursor(panelX + 28 + ox, panelY + 66 + oy);
-  g.print("pollen delivered");
+  const char* deliveredText = "pollen delivered";
+  int deliveredW = (int)strlen(deliveredText) * 6;
+  int deliveredX = panelX + (panelW - deliveredW) / 2;
+  g.setCursor(deliveredX + ox, panelY + 66 + oy);
+  g.print(deliveredText);
 
   if ((millis() % 800) < 400) {
     g.setTextSize(1);
     g.setTextColor(COL_UI_GO);
-    g.setCursor(panelX + 30 + ox, panelY + 82 + oy);
-    g.print("Press to play again");
+    const char* playAgainText = "Press to play again";
+    int playAgainW = (int)strlen(playAgainText) * 6;
+    int playAgainX = panelX + (panelW - playAgainW) / 2;
+    g.setCursor(playAgainX + ox, panelY + 82 + oy);
+    g.print(playAgainText);
   }
 
   g.setTextWrap(true);
