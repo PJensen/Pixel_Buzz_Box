@@ -193,6 +193,10 @@ static float survivalTimeLeft = SURVIVAL_TIME_MAX;
 static bool isGameOver = false;
 static uint32_t gameOverMs = 0;
 
+// -------------------- HIVE DROP-OFF VFX --------------------
+static uint32_t hivePulseUntilMs = 0;
+static const uint32_t HIVE_PULSE_MS = 520;
+
 // -------------------- WORLD CONSTRAINTS --------------------
 // Spring-based exploration area - joystick maps to target within this radius
 static const float BOUNDARY_COMFORTABLE = 180.0f; // max exploration radius from hive
@@ -675,6 +679,20 @@ static void drawHive(Adafruit_GFX &g, int x, int y) {
   g.drawCircle(x, y,  2, COL_HIVE);
 }
 
+static void drawHivePulse(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
+  if ((int32_t)(nowMs - hivePulseUntilMs) >= 0) return;
+  float t = 1.0f - (float)(hivePulseUntilMs - nowMs) / (float)HIVE_PULSE_MS;
+  t = clampf(t, 0.0f, 1.0f);
+  int r = 10 + (int)(t * 26.0f);
+  uint16_t c1 = rgb565(140, 220, 150);
+  uint16_t c2 = rgb565(220, 255, 230);
+  g.drawCircle(x, y, r, c1);
+  g.drawCircle(x, y, r + 4, c2);
+  if ((nowMs & 0x3u) == 0u) {
+    g.drawCircle(x, y, r - 2, COL_WHITE);
+  }
+}
+
 static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t nowMs, uint32_t bornMs) {
   if (!f.alive) return;
   int r = (int)f.r;
@@ -704,19 +722,26 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
 
   // quick bloom pop on spawn
   uint32_t age = nowMs - bornMs;
-  if (age < 360) {
-    float t = 1.0f - (float)age / 360.0f;
-    int br = r + 6 + (int)(t * 8.0f);
+  if (age < 420) {
+    float t = (float)age / 420.0f;
+    t = clampf(t, 0.0f, 1.0f);
+    int growR = 1 + (int)(t * (float)(r + 2));
+    uint16_t bloomCore = rgb565(255, 245, 200);
+    g.fillCircle(x, y, growR, bloomCore);
+    g.drawCircle(x, y, growR + 2, COL_WHITE);
+
+    float ringT = 1.0f - t;
+    int br = r + 8 + (int)(ringT * 10.0f);
     uint16_t bc = rgb565(255, 235, 200);
     uint16_t bc2 = rgb565(255, 250, 230);
     g.drawCircle(x, y, br, bc);
-    g.drawCircle(x, y, br + 3, bc2);
+    g.drawCircle(x, y, br + 4, bc2);
     if ((age & 0x3u) == 0u) {
       g.drawCircle(x, y, br - 2, COL_WHITE);
       g.drawCircle(x, y, br + 1, COL_POLLEN_HI);
     }
     if ((age & 0x7u) == 0u) {
-      int sparkR = br + 5;
+      int sparkR = br + 6;
       g.drawPixel(x + sparkR, y, bc2);
       g.drawPixel(x - sparkR, y, bc2);
       g.drawPixel(x, y + sparkR, bc2);
@@ -1279,6 +1304,7 @@ static void tryStoreAtHive(uint32_t nowMs) {
     hasPollen = false;
     score++;
     spawnBeltItem(nowMs);
+    hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
 
     // Reset survival timer on successful delivery!
     survivalTimeLeft = SURVIVAL_TIME_MAX;
@@ -1332,6 +1358,7 @@ static void renderFrame(uint32_t nowMs) {
       // hive (only if near screen)
       if (hiveSX >= -40 && hiveSX <= tft.width() + 40 && hiveSY >= HUD_H - 40 && hiveSY <= tft.height() + 40) {
         drawHive(canvas, hiveSX + ox, hiveSY + oy);
+        drawHivePulse(canvas, hiveSX + ox, hiveSY + oy, nowMs);
       }
 
       // flowers
@@ -1429,6 +1456,7 @@ void setup() {
 
   radarActive = false;
   radarUntilMs = 0;
+  hivePulseUntilMs = 0;
 
   renderFrame(millis());
 }
@@ -1585,6 +1613,7 @@ void loop() {
     hasPollen = false;
     score = 0;
     initFlowers();
+    hivePulseUntilMs = 0;
     // Clear trail
     for (int i = 0; i < TRAIL_MAX; i++) trail[i].alive = 0;
     // Continue to render the reset state
