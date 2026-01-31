@@ -106,6 +106,7 @@ static const uint16_t COL_UI_GO      = rgb565( 80,210,140);
 static const uint16_t COL_UI_WARN    = rgb565(255,120,120);
 
 static const int HUD_H = 28;
+static const uint8_t MAX_POLLEN_CARRY = 8;
 
 // -------------------- CANVAS (micro-tiles) --------------------
 // Exact fit for 240x320: 2 cols x 4 rows
@@ -259,7 +260,7 @@ static void calibrateJoystick() {
 static float beeWX = 0.0f, beeWY = 0.0f;
 static float beeVX = 0.0f, beeVY = 0.0f;
 
-static bool hasPollen = false;
+static uint8_t pollenCount = 0;
 static uint16_t score = 0;
 
 // Bee render center (screen-space)
@@ -533,14 +534,15 @@ static void drawBoostAura(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
 }
 
 static void drawPollenSparkles(Adafruit_GFX &g, int x, int y, uint32_t nowMs) {
-  if (!hasPollen) return;
-  uint32_t h = hash32((uint32_t)nowMs >> 4);
-  for (int i = 0; i < 6; i++) {
-    int dx = (int)((h >> (i * 5)) & 0x1Fu) - 15;
-    int dy = (int)((h >> (i * 5 + 2)) & 0x1Fu) - 15;
+  if (pollenCount == 0) return;
+  int sparkles = clampi(4 + (int)pollenCount, 4, 12);
+  for (int i = 0; i < sparkles; i++) {
+    uint32_t h = hash32(((uint32_t)nowMs >> 4) + (uint32_t)i * 977u);
+    int dx = (int)(h & 0x1Fu) - 15;
+    int dy = (int)((h >> 5) & 0x1Fu) - 15;
     if ((dx * dx + dy * dy) > 160) continue;
     uint16_t c = (i & 1) ? COL_POLLEN_HI : COL_WHITE;
-    if (((h >> (i * 3)) & 1u) == 0u) g.drawPixel(x + dx, y + dy, c);
+    if (((h >> 11) & 1u) == 0u) g.drawPixel(x + dx, y + dy, c);
   }
 }
 
@@ -648,8 +650,32 @@ static void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) 
   }
 }
 
+static void drawPollenOrbit(Adafruit_GFX &g, int x, int y) {
+  if (pollenCount == 0) return;
+  int count = pollenCount;
+  float base = wingPhase * 1.4f;
+  int ring = 10 + (count / 3) * 2;
+  int ringY = ring - 2;
+
+  for (int i = 0; i < count; i++) {
+    float ang = base + (6.2831853f * (float)i) / (float)count;
+    int px = x + (int)(cosf(ang) * (float)ring);
+    int py = y + 5 + (int)(sinf(ang) * (float)ringY);
+    g.fillCircle(px, py, 2, COL_POLLEN);
+    g.drawPixel(px + 1, py - 1, COL_POLLEN_HI);
+  }
+
+  if (pollenCount >= MAX_POLLEN_CARRY) {
+    g.drawCircle(x, y + 2, ring + 4, COL_POLLEN_HI);
+  }
+}
+
 static void drawBee(Adafruit_GFX &g, int x, int y) {
-  uint16_t body = hasPollen ? rgb565(255, 245, 140) : COL_YEL;
+  float load = clampf((float)pollenCount / (float)MAX_POLLEN_CARRY, 0.0f, 1.0f);
+  uint8_t bodyR = 255;
+  uint8_t bodyG = (uint8_t)(220 + (int)(25.0f * load));
+  uint8_t bodyB = (uint8_t)(40 + (int)(120.0f * load));
+  uint16_t body = rgb565(bodyR, bodyG, bodyB);
 
   float s = sinf(wingPhase);
   int flap = (int)(s * (2 + (int)(3 * wingSpeed)));
@@ -680,10 +706,7 @@ static void drawBee(Adafruit_GFX &g, int x, int y) {
 
   g.fillTriangle(x - 13, y, x - 18, y - 2, x - 18, y + 2, COL_BLK);
 
-  if (hasPollen) {
-    g.fillCircle(x + 3, y + 8, 3, COL_YEL);
-    g.drawCircle(x + 3, y + 8, 3, COL_WHITE);
-  }
+  drawPollenOrbit(g, x, y);
 }
 
 static void drawHive(Adafruit_GFX &g, int x, int y) {
@@ -1067,8 +1090,32 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
   // Carry
   g.setTextSize(1);
   g.setCursor(6 + ox, 20 + oy);
-  g.setTextColor(hasPollen ? COL_YEL : COL_UI_DIM);
-  g.print(hasPollen ? "CARRY" : "EMPTY");
+  g.setTextColor(pollenCount ? COL_YEL : COL_UI_DIM);
+  if (pollenCount) {
+    g.print("CARRY ");
+    g.print((int)pollenCount);
+  } else {
+    g.print("EMPTY ");
+    g.print("0");
+  }
+  g.print("/");
+  g.print((int)MAX_POLLEN_CARRY);
+
+  // Pollen rack (2x4 dots)
+  int rackX = 84 + ox;
+  int rackY = 20 + oy;
+  int idx = 0;
+  for (int ry = 0; ry < 2; ry++) {
+    for (int rx = 0; rx < 4; rx++) {
+      if (idx >= MAX_POLLEN_CARRY) break;
+      int cx = rackX + rx * 6;
+      int cy = rackY + ry * 6;
+      uint16_t c = (idx < pollenCount) ? COL_POLLEN : COL_UI_DIM;
+      g.fillCircle(cx, cy, 2, c);
+      if (idx < pollenCount) g.drawPixel(cx + 1, cy - 1, COL_POLLEN_HI);
+      idx++;
+    }
+  }
 
   // Boost status (right side)
   int bx = tft.width() - 92;
@@ -1347,7 +1394,7 @@ static void beginRadarPing(uint32_t nowMs) {
   radarActive = true;
   radarUntilMs = nowMs + 320;
 
-  if (hasPollen) {
+  if (pollenCount > 0) {
     radarToHive = true;
     radarTargetWX = 0;
     radarTargetWY = 0;
@@ -1371,7 +1418,7 @@ static void beginRadarPing(uint32_t nowMs) {
 
 // -------------------- INTERACTIONS --------------------
 static void tryCollectPollen(uint32_t nowMs) {
-  if (hasPollen) return;
+  if (pollenCount >= MAX_POLLEN_CARRY) return;
 
   int32_t bx = (int32_t)beeWX;
   int32_t by = (int32_t)beeWY;
@@ -1384,7 +1431,7 @@ static void tryCollectPollen(uint32_t nowMs) {
     int32_t dy = by - f.wy;
     int32_t hitR = (int32_t)f.r + 14;
     if ((dx*dx + dy*dy) <= hitR*hitR) {
-      hasPollen = true;
+      pollenCount++;
       f.alive = 0;
       // respawn elsewhere immediately
       spawnFlowerElsewhere(i);
@@ -1401,20 +1448,23 @@ static void tryCollectPollen(uint32_t nowMs) {
 }
 
 static void tryStoreAtHive(uint32_t nowMs) {
-  if (!hasPollen) return;
+  if (pollenCount == 0) return;
 
   int32_t bx = (int32_t)beeWX;
   int32_t by = (int32_t)beeWY;
   const int32_t hiveR = 22;
 
   if ((bx*bx + by*by) <= (hiveR*hiveR)) {
-    hasPollen = false;
-    score++;
-    spawnBeltItem(nowMs);
+    uint8_t delivered = pollenCount;
+    pollenCount = 0;
+    score = (uint16_t)(score + delivered);
+    for (uint8_t i = 0; i < delivered; i++) {
+      spawnBeltItem(nowMs);
+    }
     hivePulseUntilMs = nowMs + HIVE_PULSE_MS;
     int hiveSX, hiveSY;
     worldToScreen(0, 0, hiveSX, hiveSY);
-    spawnScorePopup(nowMs, 1, hiveSX, hiveSY);
+    spawnScorePopup(nowMs, delivered, hiveSX, hiveSY);
 
     // Reset survival timer on successful delivery!
     survivalTimeLeft = SURVIVAL_TIME_MAX;
@@ -1565,7 +1615,7 @@ void setup() {
   beeVX = 0.0f;
   beeVY = 0.0f;
 
-  hasPollen = false;
+  pollenCount = 0;
   score = 0;
 
   depositsTowardBoost = 0;
@@ -1730,7 +1780,7 @@ void loop() {
     beeVY = 0.0f;
     survivalTimeLeft = SURVIVAL_TIME_MAX;
     isGameOver = false;
-    hasPollen = false;
+    pollenCount = 0;
     score = 0;
     initFlowers();
     hivePulseUntilMs = 0;
