@@ -78,12 +78,6 @@ static inline uint8_t clampu8(int v) {
   return (uint8_t)v;
 }
 
-static inline void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs) {
-  cameraShakeUntilMs = nowMs + durationMs;
-  cameraShakeDurationMs = durationMs;
-  cameraShakeMagnitude = magnitude;
-}
-
 // RGB565 helper
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
@@ -264,6 +258,12 @@ static uint32_t cameraShakeDurationMs = 0;
 static float cameraShakeMagnitude = 0.0f;
 static inline int beeScreenCX() { return tft.width() / 2 + (int)cameraShakeX; }
 static inline int beeScreenCY() { return (tft.height() + HUD_H) / 2 + (int)cameraShakeY; } // center of playfield
+
+static inline void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs) {
+  cameraShakeUntilMs = nowMs + durationMs;
+  cameraShakeDurationMs = durationMs;
+  cameraShakeMagnitude = magnitude;
+}
 
 static void initFlowerStyle(Flower &f) {
   // store petals as RGB table so we can derive a darker tint cheaply once
