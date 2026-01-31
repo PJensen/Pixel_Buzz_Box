@@ -477,9 +477,16 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
 
   if (tileY != 0) return;
 
+  g.setTextWrap(false);
+
+  int leftX = 6 + ox;
+  int rightX = tft.width() - 6 + ox;
+  int line1Y = 6 + oy;
+  int line2Y = 16 + oy;
+
   g.setTextSize(1);
-  g.setCursor(6 + ox, 20 + oy);
   g.setTextColor(pollenCount ? COL_YEL : COL_UI_DIM);
+  g.setCursor(leftX, line1Y);
   if (pollenCount) {
     g.print("CARRY ");
     g.print((int)pollenCount);
@@ -490,8 +497,9 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
   g.print("/");
   g.print((int)MAX_POLLEN_CARRY);
 
-  int rackX = 84 + ox;
-  int rackY = 20 + oy;
+  int rackCenterX = tft.width() / 2;
+  int rackX = rackCenterX - 9 + ox;
+  int rackY = line2Y - 2;
   int idx = 0;
   for (int ry = 0; ry < 2; ry++) {
     for (int rx = 0; rx < 4; rx++) {
@@ -505,22 +513,29 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
     }
   }
 
-  int bx = tft.width() - 92;
-  g.setCursor(bx + ox, 6 + oy);
   g.setTextColor(boostCharge ? COL_UI_GO : COL_UI_DIM);
-  g.print("BOOST ");
-  g.print(boostCharge ? "READY" : "--");
-
-  g.setCursor(bx + ox, 16 + oy);
-  g.setTextColor(COL_UI_DIM);
-  g.print("x3 ");
-  g.print((int)depositsTowardBoost);
+  const char* boostText = boostCharge ? "BOOST READY" : "BOOST --";
+  int boostW = (int)strlen(boostText) * 6;
+  g.setCursor(rightX - boostW, line1Y);
+  g.print(boostText);
 
   uint32_t now = millis();
   bool cd = (int32_t)(boostCooldownUntilMs - now) > 0;
-  g.setCursor(bx + ox, 24 + oy);
   g.setTextColor(cd ? COL_UI_WARN : COL_UI_DIM);
-  g.print(cd ? "COOLDN" : "");
+  if (cd) {
+    const char* cdText = "COOLDN";
+    int cdW = (int)strlen(cdText) * 6;
+    g.setCursor(rightX - cdW, line2Y);
+    g.print(cdText);
+  } else {
+    char boostCount[8];
+    snprintf(boostCount, sizeof(boostCount), "x3 %d", (int)depositsTowardBoost);
+    int boostCountW = (int)strlen(boostCount) * 6;
+    g.setCursor(rightX - boostCountW, line2Y);
+    g.print(boostCount);
+  }
+
+  g.setTextWrap(true);
 }
 
 static void drawBeltHUD(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
