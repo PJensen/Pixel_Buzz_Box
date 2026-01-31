@@ -35,7 +35,36 @@ Control a bee navigating an endless world to collect pollen from flowers and ret
 
 ## Building & Uploading
 
-### Arduino IDE Setup
+### PlatformIO (Recommended)
+
+PlatformIO automatically handles the RP2040 board core and library dependencies.
+
+#### VSCode
+
+1. Install the [PlatformIO IDE extension](https://platformio.org/install/ide?install=vscode)
+2. Open this folder in VSCode
+3. Click the PlatformIO icon in the sidebar
+4. Click **Build** or **Upload**
+
+#### Command Line
+
+```bash
+# Install PlatformIO Core
+pip install platformio
+
+# Build
+pio run
+
+# Upload (connect Pico while holding BOOTSEL first time)
+pio run --target upload
+```
+
+### Arduino IDE (Alternative)
+
+<details>
+<summary>Click to expand Arduino IDE instructions</summary>
+
+#### Board Setup
 
 1. Open **File > Preferences**
 2. Add the following URL to **Additional Board Manager URLs**:
@@ -45,7 +74,7 @@ Control a bee navigating an endless world to collect pollen from flowers and ret
 3. Open **Tools > Board > Boards Manager**
 4. Search for "pico" and install **Raspberry Pi Pico/RP2040** by Earle F. Philhower
 
-### Installing Libraries
+#### Installing Libraries
 
 Install the following libraries via **Sketch > Include Library > Manage Libraries**:
 
@@ -54,12 +83,14 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 | Adafruit GFX Library | Graphics primitives |
 | Adafruit ST7789 | Display driver |
 
-### Upload
+#### Upload
 
 1. Select **Tools > Board > Raspberry Pi Pico**
 2. Connect the Pico while holding BOOTSEL (first time only)
 3. Select the appropriate port
 4. Click Upload
+
+</details>
 
 ## Controls
 
