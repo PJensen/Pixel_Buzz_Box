@@ -83,6 +83,8 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 | Adafruit GFX Library | Graphics primitives |
 | Adafruit ST7789 | Display driver |
 
+Additionally, copy `lib/BuzzSynth/` to your Arduino libraries folder for audio synthesis.
+
 #### Upload
 
 1. Select **Tools > Board > Raspberry Pi Pico**
@@ -97,8 +99,9 @@ Install the following libraries via **Sketch > Include Library > Manage Librarie
 | Input | Action |
 |-------|--------|
 | Joystick | Move bee toward target position |
-| Joystick Button | Ping radar for navigation |
-| Release Joystick | Return to hive |
+| Push Joystick Down | Boost (1.2x speed multiplier) |
+| Click Joystick | Ping radar for navigation |
+| Release Joystick | Snap back toward hive center |
 
 ## Gameplay
 
@@ -110,22 +113,47 @@ Collect pollen from flowers and deliver it to the hive before your survival time
 
 - **Pollen Collection**: Fly over flowers to automatically collect pollen (max 8)
 - **Hive Delivery**: Return to the hive center to deposit pollen and gain survival time
-- **Radar**: Press the joystick button to ping—shows nearest flower (empty) or hive direction (carrying pollen)
-- **Boost**: Triggered automatically when collecting flowers; increases speed and camera zoom
-- **Survival Timer**: Starts at 15 seconds; replenished by delivering pollen
+- **Radar**: Click joystick to ping—shows nearest flower (empty) or hive direction (carrying pollen)
+- **Boost**: Auto-triggered on flower collection or manual via push-down; increases speed (1.2x) and camera zoom (1.22x) with screen shake and trail particles
+- **Survival Timer**: Starts at 15 seconds; each pollen delivered adds 0.65s base + 0.55s per pollen carried
 
 ### Scoring
 
-Each pollen delivered scores 1 point and extends your survival time. Chain deliveries for bonus time multipliers.
+Each pollen delivered scores 1 point with a score popup animation. Time gain scales with pollen carried: more pollen per trip yields better returns. Chain deposits for visual feedback via belt item animations and hive pulse effects.
 
 ## Audio Design
 
-The buzzer provides dynamic audio feedback:
+The custom **BuzzSynth** library drives a piezo buzzer with dynamic audio feedback:
 
-- **Ambient Buzz**: Pitch modulates with wing speed, turning, and acceleration
-- **Radar Ping**: 3-tone chirp sequence for navigation
-- **Collection Chirp**: Ascending tones on flower pickup
-- **Deposit Sequence**: Rising arpeggio during pollen unload
+**Sound Modes:**
+- `SND_IDLE` — Ambient wing buzz with pitch modulated by velocity, turning, and acceleration
+- `SND_CLICK` — Radar ping chirp (3-tone sequence)
+- `SND_RADAR` — Navigation tone during radar display
+- `SND_POLLEN_CHIRP` — Ascending tones on flower pickup
+- `SND_POWERUP` — Boost activation sound
+
+**Features:**
+- Dynamic pitch envelope with wingbeat variation
+- Vibrato effects responding to movement
+- Event tail smoothing between sounds
+- Ambient envelope management for seamless transitions
+
+## Technical Details
+
+**Rendering:**
+- 120x80 pixel game canvas + 28px HUD, scaled 2x to 240x216 display area
+- Offscreen buffer compositing for flicker-free graphics
+- Adaptive frame rate: 25 FPS active, 12.5 FPS idle
+
+**Physics:**
+- Spring-based movement with configurable stiffness (normal vs boost)
+- Velocity damping for smooth deceleration
+- Joystick maps to target position within roaming radius
+
+**Procedural Generation:**
+- Seeded RNG (xrnd hash) for deterministic world generation
+- 7 active flowers with collision-aware spawning
+- Infinite world via hash-based cell seeding
 
 ## License
 
