@@ -85,7 +85,7 @@ void updateUnload(uint32_t nowMs) {
 
   SoundState& snd = buzzer.getState();
   if (snd.lastUnloadFreq > 0.0f) {
-    buzzer.setEventTail(nowMs, snd.lastUnloadFreq, 140);
+    buzzer.setEventTail(nowMs, snd.lastUnloadFreq, EVENT_TAIL_MS);
   }
 
   if (unloadTotal > 0) {
@@ -103,9 +103,8 @@ void tryStoreAtHive(uint32_t nowMs) {
 
   int32_t bx = (int32_t)beeWX;
   int32_t by = (int32_t)beeWY;
-  const int32_t hiveR = 22;
 
-  if ((bx*bx + by*by) <= (hiveR*hiveR)) {
+  if ((bx*bx + by*by) <= (HIVE_COLLECTION_RADIUS*HIVE_COLLECTION_RADIUS)) {
     beginUnload(nowMs);
   }
 }

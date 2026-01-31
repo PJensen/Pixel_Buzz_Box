@@ -1,7 +1,6 @@
 // BuzzSynth - Dynamic Buzzer Sound Synthesizer
 // A reusable audio library for piezo buzzer sound effects
-#ifndef BUZZSYNTH_H
-#define BUZZSYNTH_H
+#pragma once
 
 #include <Arduino.h>
 
@@ -82,5 +81,3 @@ private:
   static float clampf(float v, float lo, float hi);
   static int clampi(int v, int lo, int hi);
 };
-
-#endif // BUZZSYNTH_H

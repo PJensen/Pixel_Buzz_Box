@@ -63,9 +63,9 @@ void updateWingAnimation(float dt) {
   float sp = fabsf(beeVX) + fabsf(beeVY);
   float spN = clampf(sp / WING_SPEED_DIVISOR, 0.0f, 1.0f);
   wingSpeed = spN;
-  float hz = 3.0f + 14.0f * wingSpeed;
+  float hz = WING_HZ_MIN + WING_HZ_RANGE * wingSpeed;
   wingPhase += 2.0f * 3.1415926f * hz * dt;
-  if (wingPhase > 1000.0f) wingPhase -= 1000.0f;
+  if (wingPhase > WING_PHASE_WRAP) wingPhase -= WING_PHASE_WRAP;
 }
 
 // -------------------- RESET --------------------

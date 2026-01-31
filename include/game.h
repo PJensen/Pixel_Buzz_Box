@@ -1,6 +1,5 @@
 // Pixel Buzz Box - Game Header (Domain Declarations)
-#ifndef GAME_H
-#define GAME_H
+#pragma once
 
 #include "config.h"
 #include <Adafruit_GFX.h>
@@ -125,5 +124,3 @@ void resetSurvival();
 
 // ==================== GRAPHICS (graphics.cpp) ====================
 void renderFrame(uint32_t nowMs);
-
-#endif // GAME_H

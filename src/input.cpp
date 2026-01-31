@@ -2,8 +2,8 @@
 #include "game.h"
 
 // -------------------- INPUT STATE --------------------
-int joyCenterX = 512;
-int joyCenterY = 512;
+int joyCenterX = JOY_CENTER_DEFAULT;
+int joyCenterY = JOY_CENTER_DEFAULT;
 int joyMinY = 1023;
 int joyMaxY = 0;
 bool btnPrev = false;
@@ -22,15 +22,14 @@ int applyDeadzone(int v, int center, int dz) {
 
 void calibrateJoystick() {
   long sx = 0, sy = 0;
-  const int N = 40;
-  delay(30);
-  for (int i = 0; i < N; i++) {
+  delay(JOY_CALIBRATION_DELAY_MS);
+  for (int i = 0; i < JOY_CALIBRATION_SAMPLES; i++) {
     sx += readJoyX();
     sy += readJoyY();
-    delay(2);
+    delay(LOOP_DELAY_MS);
   }
-  joyCenterX = (int)(sx / N);
-  joyCenterY = (int)(sy / N);
+  joyCenterX = (int)(sx / JOY_CALIBRATION_SAMPLES);
+  joyCenterY = (int)(sy / JOY_CALIBRATION_SAMPLES);
 }
 
 // -------------------- NORMALIZED INPUT --------------------
@@ -43,12 +42,11 @@ void readNormalizedJoystick(float &nx, float &ny, int &rawDx, int &rawDy) {
   if (rawY > joyMaxY) joyMaxY = rawY;
 
   // Deadzone
-  const int dead = 35;
-  rawDx = applyDeadzone(rawX, joyCenterX, dead);
-  rawDy = applyDeadzone(rawY, joyCenterY, dead);
+  rawDx = applyDeadzone(rawX, joyCenterX, JOY_DEADZONE);
+  rawDy = applyDeadzone(rawY, joyCenterY, JOY_DEADZONE);
 
   // Normalize X
-  nx = -(float)clampi(rawDx, -512, 512) / 512.0f;
+  nx = -(float)clampi(rawDx, -JOY_RANGE, JOY_RANGE) / (float)JOY_RANGE;
 
   // Normalize Y with auto-cal asymmetry
   int upSpan   = joyCenterY - joyMinY;
@@ -57,10 +55,9 @@ void readNormalizedJoystick(float &nx, float &ny, int &rawDx, int &rawDy) {
   if (downSpan < 1) downSpan = 1;
 
   float nyRaw;
-  const float DOWN_BOOST = 1.20f;
   if (rawDy >= 0) {
     nyRaw = (float)rawDy / (float)downSpan;
-    nyRaw *= DOWN_BOOST;
+    nyRaw *= JOY_DOWN_BOOST;
   } else {
     nyRaw = (float)rawDy / (float)upSpan;
   }
