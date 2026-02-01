@@ -28,15 +28,18 @@ void updateSurvivalTimer(float dt, uint32_t nowMs) {
 }
 
 // -------------------- TIME GAIN --------------------
-void addSurvivalTime(uint32_t nowMs, float amount) {
+float addSurvivalTime(uint32_t nowMs, float amount) {
   float before = survivalTimeLeft;
   float after = clampf(survivalTimeLeft + amount, 0.0f, SURVIVAL_TIME_MAX);
+  float overage = (survivalTimeLeft + amount) - after;
   survivalTimeLeft = after;
 
   // Flash effect
   survivalFlashStartPct = clampf(before / SURVIVAL_TIME_MAX, 0.0f, 1.0f);
   survivalFlashEndPct = clampf(after / SURVIVAL_TIME_MAX, 0.0f, 1.0f);
   survivalFlashUntilMs = nowMs + SURVIVAL_FLASH_MS;
+
+  return overage;
 }
 
 // -------------------- RESET --------------------

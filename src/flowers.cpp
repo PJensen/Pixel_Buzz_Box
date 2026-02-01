@@ -124,6 +124,12 @@ bool tryCollectPollen(uint32_t nowMs) {
     int32_t dx = bx - f.wx;
     int32_t dy = by - f.wy;
     int32_t hitR = (int32_t)f.r + BEE_HIT_RADIUS;
+
+    // Pollen Magnet: 2x collection range
+    if (pollenMagnetActive) {
+      hitR *= 2;
+    }
+
     if ((dx*dx + dy*dy) <= hitR*hitR) {
       pollenCount++;
       f.alive = 0;

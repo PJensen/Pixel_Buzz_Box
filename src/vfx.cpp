@@ -106,7 +106,7 @@ bool anyTrailAlive() {
 }
 
 // -------------------- SCORE POPUP FUNCTIONS --------------------
-void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy) {
+void spawnScorePopup(uint32_t nowMs, uint8_t pollenCount, float multiplier, int sx, int sy) {
   int freeIdx = -1;
   uint32_t oldest = 0xFFFFFFFFu;
   int oldestIdx = 0;
@@ -119,7 +119,8 @@ void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy) {
   int idx = (freeIdx >= 0) ? freeIdx : oldestIdx;
   scorePopups[idx].alive = 1;
   scorePopups[idx].bornMs = nowMs;
-  scorePopups[idx].value = value;
+  scorePopups[idx].value = pollenCount;
+  scorePopups[idx].multiplier = multiplier;
   scorePopups[idx].baseSX = (int16_t)sx;
   scorePopups[idx].baseSY = (int16_t)sy;
   scorePopups[idx].driftX = (int8_t)irand(SCORE_POPUP_DRIFT_MIN, SCORE_POPUP_DRIFT_MAX);
