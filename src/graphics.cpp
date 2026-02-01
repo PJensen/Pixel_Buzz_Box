@@ -807,6 +807,50 @@ static void drawGameOver(Adafruit_GFX &g, int ox, int oy) {
   }
 }
 
+static void drawBeeTether(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  // Draw dotted line from bee to hive
+  int hiveSX, hiveSY;
+  worldToScreen(0, 0, hiveSX, hiveSY);
+
+  int beeSX = beeScreenCX();
+  int beeSY = beeScreenCY();
+
+  float dx = (float)(hiveSX - beeSX);
+  float dy = (float)(hiveSY - beeSY);
+  float dist = sqrtf(dx * dx + dy * dy);
+
+  if (dist < 2.0f) return; // Don't draw if too close
+
+  // Normalize direction
+  float ux = dx / dist;
+  float uy = dy / dist;
+
+  // Animated dotted line (purple/blue color)
+  uint16_t tetherColor = rgb565(120, 100, 220); // Purple-blue color
+  uint16_t tetherAltColor = rgb565(140, 160, 255); // Lighter blue accent
+
+  // Animate the dots by shifting the pattern over time
+  float offset = (float)((nowMs / 80) % 12);
+
+  // Draw dots along the line
+  float dotSpacing = 8.0f;
+  for (float i = offset; i < dist; i += dotSpacing) {
+    int sx = beeSX + (int)(ux * i);
+    int sy = beeSY + (int)(uy * i);
+
+    // Alternate between colors for a shimmer effect
+    uint16_t c = ((int)(i / dotSpacing) & 1) ? tetherColor : tetherAltColor;
+
+    // Draw dot (2 pixel circle)
+    g.fillCircle(sx + ox, sy + oy, 1, c);
+
+    // Add occasional brighter dots
+    if ((int)(i / dotSpacing) % 4 == 0) {
+      g.drawPixel(sx + ox, sy + oy, COL_WHITE);
+    }
+  }
+}
+
 static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   if (!radarActive) return;
   if ((int32_t)(nowMs - radarUntilMs) >= 0) { radarActive = false; return; }
@@ -890,6 +934,9 @@ void renderFrame(uint32_t nowMs) {
         drawHive(canvas, hiveSX + ox, hiveSY + oy);
         drawHivePulse(canvas, hiveSX + ox, hiveSY + oy, nowMs);
       }
+
+      // Draw tether line from bee to hive
+      drawBeeTether(canvas, ox, oy, nowMs);
 
       for (int i = 0; i < FLOWER_N; i++) {
         if (!flowers[i].alive) continue;
