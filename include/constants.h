@@ -95,6 +95,8 @@ static const uint8_t RARE_FLOWER_SPAWN_CHANCE = 25;   // % chance (0-100)
 static const int RARE_FLOWER_DIST_MIN = 140;          // Min distance from hive
 static const int RARE_FLOWER_DIST_MAX = 230;          // Max distance (near boundary)
 static const uint8_t RARE_FLOWER_POLLEN_BONUS = 2;    // Extra pollen (total = 1 + bonus)
+static const int RARE_FLOWER_RADIUS_MIN = 9;          // Larger than normal (6-11)
+static const int RARE_FLOWER_RADIUS_MAX = 13;
 
 // -------------------- HIVE --------------------
 static const int HIVE_COLLECTION_RADIUS = 22;

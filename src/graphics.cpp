@@ -154,20 +154,23 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
   g.drawPixel(x - 1, y - 1, COL_POLLEN_HI);
   g.drawPixel(x - 2, y - 1, COL_WHITE);
 
-  // quick bloom pop on spawn
+  // Bloom animation on spawn (enhanced for rare flowers)
   uint32_t age = nowMs - bornMs;
-  if (age < 420) {
-    float t = (float)age / 420.0f;
+  uint32_t bloomDuration = (f.type == FLOWER_RARE) ? 600 : 420;
+  if (age < bloomDuration) {
+    float t = (float)age / (float)bloomDuration;
     t = clampf(t, 0.0f, 1.0f);
     int growR = 1 + (int)(t * (float)(r + 2));
-    uint16_t bloomCore = rgb565(255, 245, 200);
+
+    // Rare flowers have gold bloom
+    uint16_t bloomCore = (f.type == FLOWER_RARE) ? rgb565(255, 220, 120) : rgb565(255, 245, 200);
     g.fillCircle(x, y, growR, bloomCore);
     g.drawCircle(x, y, growR + 2, COL_WHITE);
 
     float ringT = 1.0f - t;
-    int br = r + 8 + (int)(ringT * 10.0f);
-    uint16_t bc = rgb565(255, 235, 200);
-    uint16_t bc2 = rgb565(255, 250, 230);
+    int br = r + 8 + (int)(ringT * (f.type == FLOWER_RARE ? 14.0f : 10.0f));
+    uint16_t bc = (f.type == FLOWER_RARE) ? rgb565(255, 200, 100) : rgb565(255, 235, 200);
+    uint16_t bc2 = (f.type == FLOWER_RARE) ? rgb565(255, 235, 150) : rgb565(255, 250, 230);
     g.drawCircle(x, y, br, bc);
     g.drawCircle(x, y, br + 4, bc2);
     if ((age & 0x3u) == 0u) {
@@ -180,6 +183,37 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
       g.drawPixel(x - sparkR, y, bc2);
       g.drawPixel(x, y + sparkR, bc2);
       g.drawPixel(x, y - sparkR, bc2);
+    }
+  }
+
+  // Rare flowers have continuous shimmer/sparkle effect
+  if (f.type == FLOWER_RARE && age > 600) {
+    // Animated sparkles that rotate around the flower
+    uint32_t sparkPhase = (nowMs / 80) % 8;  // 8-step rotation
+    int sparkDist = r + 4;
+    uint16_t sparkCol = COL_POLLEN_HI;
+
+    // Primary sparkle
+    if (sparkPhase == 0 || sparkPhase == 4) {
+      g.drawPixel(x + sparkDist, y, sparkCol);
+    } else if (sparkPhase == 1 || sparkPhase == 5) {
+      g.drawPixel(x + sparkDist - 2, y - sparkDist + 2, sparkCol);
+    } else if (sparkPhase == 2 || sparkPhase == 6) {
+      g.drawPixel(x, y - sparkDist, sparkCol);
+    } else if (sparkPhase == 3 || sparkPhase == 7) {
+      g.drawPixel(x - sparkDist + 2, y - sparkDist + 2, sparkCol);
+    }
+
+    // Secondary sparkle (opposite side)
+    uint32_t sparkPhase2 = (sparkPhase + 4) % 8;
+    if (sparkPhase2 == 0 || sparkPhase2 == 4) {
+      g.drawPixel(x - sparkDist, y, COL_WHITE);
+    } else if (sparkPhase2 == 1 || sparkPhase2 == 5) {
+      g.drawPixel(x - sparkDist + 2, y + sparkDist - 2, COL_WHITE);
+    } else if (sparkPhase2 == 2 || sparkPhase2 == 6) {
+      g.drawPixel(x, y + sparkDist, COL_WHITE);
+    } else if (sparkPhase2 == 3 || sparkPhase2 == 7) {
+      g.drawPixel(x + sparkDist - 2, y + sparkDist - 2, COL_WHITE);
     }
   }
 }
@@ -198,10 +232,19 @@ void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
     float t = (float)age / (float)TRAIL_LIFE_MS;
     float alpha = 1.0f - t * t;
 
-    float speedT = trail[i].speedN;
-    uint8_t baseR = (uint8_t)(255 - (int)(115.0f * speedT));
-    uint8_t baseG = (uint8_t)(220 - (int)(120.0f * speedT));
-    uint8_t baseB = (uint8_t)(60 + (int)(195.0f * speedT));
+    uint8_t baseR, baseG, baseB;
+
+    // Variant 3 = gold particles for rare flowers
+    if (trail[i].variant == 3) {
+      baseR = 255;
+      baseG = (uint8_t)(220 - (int)(30.0f * t));  // Fade from gold to deep gold
+      baseB = (uint8_t)(100 - (int)(50.0f * t));
+    } else {
+      float speedT = trail[i].speedN;
+      baseR = (uint8_t)(255 - (int)(115.0f * speedT));
+      baseG = (uint8_t)(220 - (int)(120.0f * speedT));
+      baseB = (uint8_t)(60 + (int)(195.0f * speedT));
+    }
 
     uint8_t r = (uint8_t)(baseR * alpha);
     uint8_t g_val = (uint8_t)(baseG * alpha);

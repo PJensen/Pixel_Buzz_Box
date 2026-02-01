@@ -56,7 +56,12 @@ void initFlowerStyle(Flower &f) {
 void spawnFlowerAt(int i, int32_t wx, int32_t wy, FlowerType type) {
   Flower &f = flowers[i];
   f.alive = 1;
-  f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
+  // Rare flowers are larger for better visual distinction
+  if (type == FLOWER_RARE) {
+    f.r = (uint8_t)irand(RARE_FLOWER_RADIUS_MIN, RARE_FLOWER_RADIUS_MAX);
+  } else {
+    f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
+  }
   f.wx = wx;
   f.wy = wy;
   f.type = type;
@@ -162,9 +167,20 @@ bool tryCollectPollen(uint32_t nowMs) {
 
     if ((dx*dx + dy*dy) <= hitR*hitR) {
       // Rare flowers grant bonus pollen (risk/reward)
-      uint8_t pollenGain = (f.type == FLOWER_RARE) ? (1 + RARE_FLOWER_POLLEN_BONUS) : 1;
+      bool isRare = (f.type == FLOWER_RARE);
+      uint8_t pollenGain = isRare ? (1 + RARE_FLOWER_POLLEN_BONUS) : 1;
       pollenCount += pollenGain;
       if (pollenCount > MAX_POLLEN_CARRY) pollenCount = MAX_POLLEN_CARRY;
+
+      // Spawn gold particle burst for rare flowers
+      if (isRare) {
+        for (int p = 0; p < 6; p++) {
+          float angle = (float)p * 1.047f;  // 60 degrees apart
+          float ox = cosf(angle) * 8.0f;
+          float oy = sinf(angle) * 8.0f;
+          spawnTrailParticle((float)f.wx + ox, (float)f.wy + oy, 0.8f, nowMs, 3);  // variant 3 = gold
+        }
+      }
 
       f.alive = 0;
       spawnFlowerElsewhere(i);
@@ -172,7 +188,15 @@ bool tryCollectPollen(uint32_t nowMs) {
       // Auto-boost on flower pickup
       triggerAutoBoost(nowMs);
 
-      if (!buzzer.soundBusy()) buzzer.startSound(SND_POLLEN_CHIRP, nowMs);
+      // Rare flowers have enhanced feedback
+      if (isRare) {
+        triggerCameraShake(nowMs, 8.5f, 220);  // Stronger shake than normal
+      }
+
+      // Rare flowers play special powerup sound
+      if (!buzzer.soundBusy()) {
+        buzzer.startSound(isRare ? SND_POWERUP : SND_POLLEN_CHIRP, nowMs);
+      }
       return true;
     }
   }
@@ -192,6 +216,12 @@ bool findNearestFlower(int32_t &outWX, int32_t &outWY) {
     int32_t dx = flowers[i].wx - bx;
     int32_t dy = flowers[i].wy - by;
     int64_t d2 = (int64_t)dx * (int64_t)dx + (int64_t)dy * (int64_t)dy;
+
+    // Radar prioritizes rare flowers (treat them as 60% closer)
+    if (flowers[i].type == FLOWER_RARE) {
+      d2 = (d2 * 36) / 100;  // 0.6^2 = 0.36
+    }
+
     if (best < 0 || d2 < bestD2) { best = i; bestD2 = d2; }
   }
 

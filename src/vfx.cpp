@@ -79,12 +79,13 @@ uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt) {
 }
 
 // -------------------- TRAIL FUNCTIONS --------------------
-void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs) {
+void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs, int8_t forceVariant) {
   trail[trailNextIdx].wx = wx;
   trail[trailNextIdx].wy = wy;
   trail[trailNextIdx].bornMs = nowMs;
   trail[trailNextIdx].alive = 1;
-  trail[trailNextIdx].variant = (uint8_t)(xrnd() % 3);
+  // Variant 3 = gold particles for rare flowers
+  trail[trailNextIdx].variant = (forceVariant >= 0) ? (uint8_t)forceVariant : (uint8_t)(xrnd() % 3);
   trail[trailNextIdx].speedN = clampf(speedN, 0.0f, 1.0f);
   trailNextIdx = (trailNextIdx + 1) % TRAIL_MAX;
 }

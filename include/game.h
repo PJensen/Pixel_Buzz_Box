@@ -105,7 +105,7 @@ void resetCamera();
 void worldToScreen(int32_t wx, int32_t wy, int &sx, int &sy);
 void worldToScreenF(float wx, float wy, int &sx, int &sy);
 uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt);
-void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs);
+void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs, int8_t forceVariant = -1);
 void updateTrailParticles(uint32_t nowMs);
 bool anyTrailAlive();
 void spawnScorePopup(uint32_t nowMs, uint8_t pollenCount, float multiplier, int sx, int sy);
