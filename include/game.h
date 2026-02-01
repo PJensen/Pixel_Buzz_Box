@@ -61,6 +61,10 @@ extern uint32_t unloadNextMs;
 extern uint8_t depositsTowardBoost;
 extern uint8_t boostCharge;
 extern BeltItem beltItems[BELT_ITEM_N];
+extern float bonusPoints;
+extern uint16_t totalBonusCharges;
+extern bool pollenMagnetActive;
+extern uint32_t bonusFlashUntilMs;
 
 void spawnBeltItem(uint32_t nowMs);
 void updateBeltLifetimes(uint32_t nowMs);
@@ -68,6 +72,8 @@ bool anyBeltAlive();
 void beginUnload(uint32_t nowMs);
 void updateUnload(uint32_t nowMs);
 void tryStoreAtHive(uint32_t nowMs);
+void updateBonusSystem();
+float getScoreMultiplier();
 void resetHive();
 
 // ==================== RADAR (radar.cpp) ====================
@@ -102,7 +108,7 @@ uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt);
 void spawnTrailParticle(float wx, float wy, float speedN, uint32_t nowMs);
 void updateTrailParticles(uint32_t nowMs);
 bool anyTrailAlive();
-void spawnScorePopup(uint32_t nowMs, uint8_t value, int sx, int sy);
+void spawnScorePopup(uint32_t nowMs, uint8_t pollenCount, float multiplier, int sx, int sy);
 void updateScorePopups(uint32_t nowMs);
 bool anyScorePopupAlive();
 void triggerHivePulse(uint32_t nowMs);
@@ -119,7 +125,7 @@ extern float survivalFlashStartPct;
 extern float survivalFlashEndPct;
 
 void updateSurvivalTimer(float dt, uint32_t nowMs);
-void addSurvivalTime(uint32_t nowMs, float amount);
+float addSurvivalTime(uint32_t nowMs, float amount);
 void resetSurvival();
 
 // ==================== GRAPHICS (graphics.cpp) ====================

@@ -31,6 +31,7 @@ struct ScorePopup {
   int16_t baseSX;       // Screen X
   int16_t baseSY;       // Screen Y
   int8_t driftX;
-  uint8_t value;
+  uint8_t value;        // Pollen count
+  float multiplier;     // Score multiplier
   uint8_t alive;
 };

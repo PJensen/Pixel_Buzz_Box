@@ -40,6 +40,12 @@ static const float SURVIVAL_TIME_MAX = 15.0f;
 static const float SURVIVAL_POLLEN_BASE = 0.65f;
 static const float SURVIVAL_POLLEN_MULT_STEP = 0.55f;
 
+// -------------------- BONUS SYSTEM --------------------
+static const float BONUS_SECONDS_PER_CHARGE = 3.0f;
+static const float BONUS_MULTIPLIER_PER_CHARGE = 1.0f;
+static const uint8_t BONUS_CHARGES_PER_ABILITY = 3;
+static const uint32_t BONUS_FLASH_MS = 200;
+
 // -------------------- WORLD CONSTRAINTS --------------------
 static const float BOUNDARY_COMFORTABLE = 180.0f;
 
