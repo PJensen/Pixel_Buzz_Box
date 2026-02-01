@@ -112,6 +112,7 @@ Collect pollen from flowers and deliver it to the hive before your survival time
 ### Mechanics
 
 - **Pollen Collection**: Fly over flowers to automatically collect pollen (max 8)
+- **Rare Flowers**: Occasionally spawn farther out in riskier zones and award bonus pollen when collected
 - **Hive Delivery**: Return to the hive center to deposit pollen and gain survival time
 - **Radar**: Click joystick to ping—shows nearest flower (empty) or hive direction (carrying pollen)
 - **Boost**: Auto-triggered on flower collection or manual via push-down; increases speed (1.2x) and camera zoom (1.22x) with screen shake and trail particles

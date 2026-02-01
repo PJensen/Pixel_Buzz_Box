@@ -153,6 +153,14 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
 
   g.drawPixel(x - 1, y - 1, COL_POLLEN_HI);
   g.drawPixel(x - 2, y - 1, COL_WHITE);
+  if (f.rare) {
+    uint16_t halo = rgb565(255, 240, 140);
+    g.drawCircle(x, y, r + 2, halo);
+    if ((nowMs & 0x3u) == 0u) {
+      g.drawPixel(x + r + 3, y, COL_WHITE);
+      g.drawPixel(x - r - 3, y, COL_WHITE);
+    }
+  }
 
   // quick bloom pop on spawn
   uint32_t age = nowMs - bornMs;
