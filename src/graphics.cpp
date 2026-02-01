@@ -240,6 +240,7 @@ void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
 // -------------------- SCORE POPUPS --------------------
 void drawScorePopups(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   char buf[8];
+  char multBuf[8];
   for (int i = 0; i < SCORE_POPUP_N; i++) {
     if (!scorePopups[i].alive) continue;
     uint32_t age = nowMs - scorePopups[i].bornMs;
@@ -260,6 +261,7 @@ void drawScorePopups(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
     else if (t < 0.72f) size = 2;
     else size = 3;
 
+    // Draw pollen count (large)
     snprintf(buf, sizeof(buf), "+%d", (int)scorePopups[i].value);
     int len = (int)strlen(buf);
     int textW = len * 6 * size;
@@ -293,6 +295,20 @@ void drawScorePopups(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
       g.print(buf);
       g.setCursor(x0 + 1 + ox, y0 - 1 + oy);
       g.print(buf);
+    }
+
+    // Draw multiplier below (small, baby blue)
+    if (scorePopups[i].multiplier > 1.0f) {
+      snprintf(multBuf, sizeof(multBuf), "x%.1f", scorePopups[i].multiplier);
+      int multLen = (int)strlen(multBuf);
+      int multW = multLen * 6;  // Size 1
+      int multX = cx - multW / 2;
+      int multY = y0 + textH + 2;  // Below main number
+
+      g.setTextSize(1);
+      g.setTextColor(COL_WING);
+      g.setCursor(multX + ox, multY + oy);
+      g.print(multBuf);
     }
 
     g.setTextWrap(true);
@@ -513,23 +529,43 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
     }
   }
 
+  // Score multiplier display
+  float mult = getScoreMultiplier();
+  if (mult > 1.0f) {
+    char multText[12];
+    snprintf(multText, sizeof(multText), "x%.1f", mult);
+    g.setTextColor(COL_YEL);
+    g.setCursor(leftX, line2Y);
+    g.print(multText);
+  }
+
   g.setTextColor(boostCharge ? COL_UI_GO : COL_UI_DIM);
-  const char* boostText = boostCharge ? "BOOST READY" : "BOOST --";
+  const char* boostText = boostCharge ? "MAGNET READY" : "MAGNET --";
   int boostW = (int)strlen(boostText) * 6;
   g.setCursor(rightX - boostW, line1Y);
   g.print(boostText);
 
   uint32_t now = millis();
   bool cd = (int32_t)(boostCooldownUntilMs - now) > 0;
-  g.setTextColor(cd ? COL_UI_WARN : COL_UI_DIM);
+  bool bonusFlash = (int32_t)(bonusFlashUntilMs - now) > 0;
+
   if (cd) {
+    g.setTextColor(COL_UI_WARN);
     const char* cdText = "COOLDN";
     int cdW = (int)strlen(cdText) * 6;
     g.setCursor(rightX - cdW, line2Y);
     g.print(cdText);
+  } else if (bonusFlash) {
+    // Flash "BONUS!" when overage collected
+    g.setTextColor(COL_POLLEN_HI);
+    const char* bonusText = "BONUS!";
+    int bonusW = (int)strlen(bonusText) * 6;
+    g.setCursor(rightX - bonusW, line2Y);
+    g.print(bonusText);
   } else {
-    char boostCount[8];
-    snprintf(boostCount, sizeof(boostCount), "x3 %d", (int)depositsTowardBoost);
+    g.setTextColor(COL_UI_DIM);
+    char boostCount[12];
+    snprintf(boostCount, sizeof(boostCount), "x3 %d/%d", (int)depositsTowardBoost, BONUS_CHARGES_PER_ABILITY);
     int boostCountW = (int)strlen(boostCount) * 6;
     g.setCursor(rightX - boostCountW, line2Y);
     g.print(boostCount);
