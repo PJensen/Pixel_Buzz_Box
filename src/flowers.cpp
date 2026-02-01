@@ -19,8 +19,17 @@ void initFlowerStyle(Flower &f) {
     {255, 170,  80},
     {120, 255, 170},
   };
-  int pi = irand(0, (int)(sizeof(petals)/sizeof(petals[0])) - 1);
-  RGB p = petals[pi];
+  static const RGB rarePetals[] = {
+    {255, 210,  90},
+    {255, 170,  70},
+    {255, 230, 130},
+  };
+
+  const RGB *palette = f.rare ? rarePetals : petals;
+  int paletteSize = f.rare ? (int)(sizeof(rarePetals)/sizeof(rarePetals[0]))
+                           : (int)(sizeof(petals)/sizeof(petals[0]));
+  int pi = irand(0, paletteSize - 1);
+  RGB p = palette[pi];
 
   f.petal = rgb565(p.r, p.g, p.b);
   uint8_t r2 = (p.r > 52) ? (uint8_t)(p.r - 52) : 0;
@@ -28,16 +37,17 @@ void initFlowerStyle(Flower &f) {
   uint8_t b2 = (p.b > 52) ? (uint8_t)(p.b - 52) : 0;
   f.petalLo = rgb565(r2, g2, b2);
 
-  f.center = rgb565(255, 235, 130);
+  f.center = f.rare ? rgb565(255, 245, 180) : rgb565(255, 235, 130);
 }
 
 // -------------------- SPAWNING --------------------
-void spawnFlowerAt(int i, int32_t wx, int32_t wy) {
+void spawnFlowerAt(int i, int32_t wx, int32_t wy, bool rare) {
   Flower &f = flowers[i];
   f.alive = 1;
   f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
   f.wx = wx;
   f.wy = wy;
+  f.rare = rare ? 1 : 0;
   initFlowerStyle(f);
   flowerBornMs[i] = millis();
 }
@@ -58,14 +68,26 @@ void spawnFlowerNearOrigin(int i) {
     }
     if (!ok) continue;
 
-    spawnFlowerAt(i, wx, wy);
+    spawnFlowerAt(i, wx, wy, false);
     return;
   }
   // fallback
   int32_t r = (int32_t)irand(100, 180);
   int32_t a = (int32_t)irand(0, 359);
   float ang = (float)a * 0.0174532925f;
-  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
+  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r), false);
+}
+
+static bool isRareSpawnCandidate(int32_t wx, int32_t wy) {
+  int32_t d2 = wx * wx + wy * wy;
+  int32_t minDist = RARE_FLOWER_MIN_DIST;
+  if (d2 < (int32_t)minDist * (int32_t)minDist) return false;
+
+  float ring = BOUNDARY_COMFORTABLE * RARE_FLOWER_RISK_RING;
+  int32_t ringDist = (int32_t)ring;
+  if (d2 < ringDist * ringDist) return false;
+
+  return irand(1, 100) <= RARE_FLOWER_CHANCE;
 }
 
 void spawnFlowerElsewhere(int i) {
@@ -92,14 +114,18 @@ void spawnFlowerElsewhere(int i) {
     }
     if (!ok) continue;
 
-    spawnFlowerAt(i, wx, wy);
+    bool rare = isRareSpawnCandidate(wx, wy);
+    spawnFlowerAt(i, wx, wy, rare);
     return;
   }
   // fallback
   int32_t r = (int32_t)irand(80, 200);
   int32_t a = (int32_t)irand(0, 359);
   float ang = (float)a * 0.0174532925f;
-  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
+  int32_t wx = (int32_t)(cosf(ang) * (float)r);
+  int32_t wy = (int32_t)(sinf(ang) * (float)r);
+  bool rare = isRareSpawnCandidate(wx, wy);
+  spawnFlowerAt(i, wx, wy, rare);
 }
 
 void initFlowers() {
@@ -131,7 +157,13 @@ bool tryCollectPollen(uint32_t nowMs) {
     }
 
     if ((dx*dx + dy*dy) <= hitR*hitR) {
-      pollenCount++;
+      uint8_t gain = 1;
+      if (f.rare) {
+        gain = (uint8_t)(gain + RARE_FLOWER_BONUS_POLLEN);
+      }
+      uint8_t room = (uint8_t)(MAX_POLLEN_CARRY - pollenCount);
+      if (gain > room) gain = room;
+      pollenCount = (uint8_t)(pollenCount + gain);
       f.alive = 0;
       spawnFlowerElsewhere(i);
 

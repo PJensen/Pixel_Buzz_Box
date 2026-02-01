@@ -8,6 +8,7 @@ struct Flower {
   int32_t wx, wy;       // World position
   uint8_t alive;
   uint8_t r;            // Radius
+  uint8_t rare;         // Rare flower flag
   uint16_t petal;       // Petal color
   uint16_t petalLo;     // Darker petal color
   uint16_t center;      // Center color

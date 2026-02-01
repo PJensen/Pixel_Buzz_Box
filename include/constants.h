@@ -89,6 +89,10 @@ static const int FLOWER_SPAWN_ELSEWHERE_MARGIN = 20;
 static const int FLOWER_BEE_AVOIDANCE_DIST = 150;
 static const int FLOWER_SPACING_ELSEWHERE = 120;
 static const int BEE_HIT_RADIUS = 14;
+static const uint8_t RARE_FLOWER_CHANCE = 18;           // percent chance in risk zone
+static const uint8_t RARE_FLOWER_BONUS_POLLEN = 2;      // extra pollen on pickup
+static const int RARE_FLOWER_MIN_DIST = 140;            // minimum distance from hive
+static const float RARE_FLOWER_RISK_RING = 0.78f;       // fraction of boundary for rare spawns
 
 // -------------------- HIVE --------------------
 static const int HIVE_COLLECTION_RADIUS = 22;
