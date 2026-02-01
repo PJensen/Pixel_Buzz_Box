@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "author": "Pixel Buzz Box",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-pi-pico",
+      "id": "pico",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ili9341",
+      "id": "lcd",
+      "top": -200,
+      "left": 150,
+      "attrs": { "width": "240", "height": "320" }
+    },
+    {
+      "type": "wokwi-analog-joystick",
+      "id": "joystick",
+      "top": 100,
+      "left": -150,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 200,
+      "left": 0,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    ["pico:GP16", "lcd:LED", "orange", ["h", "*"]],
+    ["pico:GP17", "lcd:CS", "green", ["h", "*"]],
+    ["pico:GP18", "lcd:SCK", "yellow", ["h", "*"]],
+    ["pico:GP19", "lcd:MOSI", "blue", ["h", "*"]],
+    ["pico:GP20", "lcd:D/C", "purple", ["h", "*"]],
+    ["pico:GP21", "lcd:RST", "gray", ["h", "*"]],
+    ["pico:3V3", "lcd:VCC", "red", ["h", "*"]],
+    ["pico:GND.1", "lcd:GND", "black", ["h", "*"]],
+
+    ["pico:GP22", "joystick:SEL", "cyan", ["v", "*"]],
+    ["pico:GP26", "joystick:VRX", "magenta", ["v", "*"]],
+    ["pico:GP27", "joystick:VRY", "white", ["v", "*"]],
+    ["pico:3V3", "joystick:VCC", "red", ["v", "*"]],
+    ["pico:GND.2", "joystick:GND", "black", ["v", "*"]],
+
+    ["pico:GP15", "buzzer:1", "brown", ["v", "*"]],
+    ["pico:GND.3", "buzzer:2", "black", ["v", "*"]]
+  ]
+}
