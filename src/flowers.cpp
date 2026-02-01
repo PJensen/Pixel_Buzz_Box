@@ -12,32 +12,54 @@ uint32_t flowerBornMs[FLOWER_N];
 // -------------------- STYLING --------------------
 void initFlowerStyle(Flower &f) {
   struct RGB { uint8_t r, g, b; };
-  static const RGB petals[] = {
-    {255, 120, 180},
-    {170, 120, 255},
-    {120, 200, 255},
-    {255, 170,  80},
-    {120, 255, 170},
-  };
-  int pi = irand(0, (int)(sizeof(petals)/sizeof(petals[0])) - 1);
-  RGB p = petals[pi];
 
-  f.petal = rgb565(p.r, p.g, p.b);
-  uint8_t r2 = (p.r > 52) ? (uint8_t)(p.r - 52) : 0;
-  uint8_t g2 = (p.g > 52) ? (uint8_t)(p.g - 52) : 0;
-  uint8_t b2 = (p.b > 52) ? (uint8_t)(p.b - 52) : 0;
-  f.petalLo = rgb565(r2, g2, b2);
+  // Rare flowers have special gold/shimmer colors for visual distinction
+  if (f.type == FLOWER_RARE) {
+    static const RGB rarePetals[] = {
+      {255, 215, 100},  // Gold
+      {255, 240, 150},  // Bright gold
+      {255, 200,  80},  // Deep gold
+    };
+    int pi = irand(0, (int)(sizeof(rarePetals)/sizeof(rarePetals[0])) - 1);
+    RGB p = rarePetals[pi];
 
-  f.center = rgb565(255, 235, 130);
+    f.petal = rgb565(p.r, p.g, p.b);
+    uint8_t r2 = (p.r > 52) ? (uint8_t)(p.r - 52) : 0;
+    uint8_t g2 = (p.g > 52) ? (uint8_t)(p.g - 52) : 0;
+    uint8_t b2 = (p.b > 52) ? (uint8_t)(p.b - 52) : 0;
+    f.petalLo = rgb565(r2, g2, b2);
+
+    f.center = rgb565(255, 100, 50);  // Bright orange-red center
+  } else {
+    // Normal flowers use standard color palette
+    static const RGB petals[] = {
+      {255, 120, 180},
+      {170, 120, 255},
+      {120, 200, 255},
+      {255, 170,  80},
+      {120, 255, 170},
+    };
+    int pi = irand(0, (int)(sizeof(petals)/sizeof(petals[0])) - 1);
+    RGB p = petals[pi];
+
+    f.petal = rgb565(p.r, p.g, p.b);
+    uint8_t r2 = (p.r > 52) ? (uint8_t)(p.r - 52) : 0;
+    uint8_t g2 = (p.g > 52) ? (uint8_t)(p.g - 52) : 0;
+    uint8_t b2 = (p.b > 52) ? (uint8_t)(p.b - 52) : 0;
+    f.petalLo = rgb565(r2, g2, b2);
+
+    f.center = rgb565(255, 235, 130);
+  }
 }
 
 // -------------------- SPAWNING --------------------
-void spawnFlowerAt(int i, int32_t wx, int32_t wy) {
+void spawnFlowerAt(int i, int32_t wx, int32_t wy, FlowerType type) {
   Flower &f = flowers[i];
   f.alive = 1;
   f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
   f.wx = wx;
   f.wy = wy;
+  f.type = type;
   initFlowerStyle(f);
   flowerBornMs[i] = millis();
 }
@@ -69,8 +91,16 @@ void spawnFlowerNearOrigin(int i) {
 }
 
 void spawnFlowerElsewhere(int i) {
+  // Determine if this should be a rare flower (risk/reward mechanic)
+  bool isRare = (irand(0, 99) < RARE_FLOWER_SPAWN_CHANCE);
+  FlowerType type = isRare ? FLOWER_RARE : FLOWER_NORMAL;
+
+  // Rare flowers spawn farther out in riskier zones
+  int32_t distMin = isRare ? RARE_FLOWER_DIST_MIN : FLOWER_SPAWN_ELSEWHERE_DIST_MIN;
+  int32_t distMax = isRare ? RARE_FLOWER_DIST_MAX : ((int)BOUNDARY_COMFORTABLE - FLOWER_SPAWN_ELSEWHERE_MARGIN);
+
   for (int tries = 0; tries < 80; tries++) {
-    int32_t r = (int32_t)irand(FLOWER_SPAWN_ELSEWHERE_DIST_MIN, (int)BOUNDARY_COMFORTABLE - FLOWER_SPAWN_ELSEWHERE_MARGIN);
+    int32_t r = (int32_t)irand(distMin, distMax);
     int32_t a = (int32_t)irand(0, 359);
     float ang = (float)a * 0.0174532925f;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
@@ -92,14 +122,14 @@ void spawnFlowerElsewhere(int i) {
     }
     if (!ok) continue;
 
-    spawnFlowerAt(i, wx, wy);
+    spawnFlowerAt(i, wx, wy, type);
     return;
   }
   // fallback
   int32_t r = (int32_t)irand(80, 200);
   int32_t a = (int32_t)irand(0, 359);
   float ang = (float)a * 0.0174532925f;
-  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
+  spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r), type);
 }
 
 void initFlowers() {
@@ -131,7 +161,11 @@ bool tryCollectPollen(uint32_t nowMs) {
     }
 
     if ((dx*dx + dy*dy) <= hitR*hitR) {
-      pollenCount++;
+      // Rare flowers grant bonus pollen (risk/reward)
+      uint8_t pollenGain = (f.type == FLOWER_RARE) ? (1 + RARE_FLOWER_POLLEN_BONUS) : 1;
+      pollenCount += pollenGain;
+      if (pollenCount > MAX_POLLEN_CARRY) pollenCount = MAX_POLLEN_CARRY;
+
       f.alive = 0;
       spawnFlowerElsewhere(i);
 

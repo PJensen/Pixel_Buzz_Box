@@ -46,7 +46,7 @@ extern Flower flowers[FLOWER_N];
 extern uint32_t flowerBornMs[FLOWER_N];
 
 void initFlowerStyle(Flower &f);
-void spawnFlowerAt(int i, int32_t wx, int32_t wy);
+void spawnFlowerAt(int i, int32_t wx, int32_t wy, FlowerType type = FLOWER_NORMAL);
 void spawnFlowerNearOrigin(int i);
 void spawnFlowerElsewhere(int i);
 void initFlowers();

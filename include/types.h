@@ -4,10 +4,16 @@
 #include <Arduino.h>
 
 // -------------------- GAME ENTITIES --------------------
+enum FlowerType : uint8_t {
+  FLOWER_NORMAL = 0,
+  FLOWER_RARE = 1
+};
+
 struct Flower {
   int32_t wx, wy;       // World position
   uint8_t alive;
   uint8_t r;            // Radius
+  FlowerType type;      // Normal or rare
   uint16_t petal;       // Petal color
   uint16_t petalLo;     // Darker petal color
   uint16_t center;      // Center color
