@@ -92,9 +92,11 @@ extern bool radarActive;
 extern uint32_t radarUntilMs;
 extern int32_t radarTargetWX, radarTargetWY;
 extern bool radarToHive;
+extern bool radarFullActive;
 
 void beginRadarPing(uint32_t nowMs);
 void updateRadar(uint32_t nowMs);
+void updateFullRadar();
 void resetRadar();
 
 // ==================== VFX (vfx.cpp) ====================

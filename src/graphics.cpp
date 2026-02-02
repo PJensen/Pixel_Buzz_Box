@@ -942,6 +942,57 @@ static void drawBeeTether(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
 }
 
 static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  // Handle full radar (persistent when at max pollen)
+  if (radarFullActive && !radarActive) {
+    // Blink: 400ms on, 400ms off
+    bool blinkOn = ((nowMs / 400u) % 2u) == 0u;
+    if (!blinkOn) return;
+
+    int cx = beeScreenCX() + ox;
+    int cy = beeScreenCY() + oy;
+
+    float dx = (float)radarTargetWX - beeWX;
+    float dy = (float)radarTargetWY - beeWY;
+    float len = sqrtf(dx*dx + dy*dy);
+
+    if (len < 1.0f) len = 1.0f;
+    float ux = dx / len;
+    float uy = dy / len;
+
+    uint16_t rc = COL_YEL;
+
+    // Draw ring around bee
+    g.drawCircle(cx, cy, 18, rc);
+
+    // Draw arrow pointing to hive
+    int ax = cx + (int)(ux * 32.0f);
+    int ay = cy + (int)(uy * 32.0f);
+
+    // Dotted line
+    for (int i = 8; i < 32; i += 5) {
+      int sx = cx + (int)(ux * (float)i);
+      int sy = cy + (int)(uy * (float)i);
+      g.drawPixel(sx, sy, COL_YEL);
+    }
+
+    // Arrow head
+    float px = -uy;
+    float py = ux;
+    int hx1 = ax - (int)(ux * 7.0f) + (int)(px * 4.0f);
+    int hy1 = ay - (int)(uy * 7.0f) + (int)(py * 4.0f);
+    int hx2 = ax - (int)(ux * 7.0f) - (int)(px * 4.0f);
+    int hy2 = ay - (int)(uy * 7.0f) - (int)(py * 4.0f);
+    g.fillTriangle(ax, ay, hx1, hy1, hx2, hy2, rc);
+
+    // Distance text
+    g.setTextSize(1);
+    g.setTextColor(COL_YEL);
+    g.setCursor(cx + 36, cy - 8);
+    g.print((int)len);
+    return;
+  }
+
+  // Normal timed radar ping
   if (!radarActive) return;
   if ((int32_t)(nowMs - radarUntilMs) >= 0) { radarActive = false; return; }
 

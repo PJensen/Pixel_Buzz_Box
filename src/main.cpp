@@ -191,6 +191,7 @@ void loop() {
 
     updateBeltLifetimes(now);
     updateRadar(now);
+    updateFullRadar();
     updateMagnet(now);
     if (isMagnetActive(now)) {
       updateFlowerPhysics(dt, now);
@@ -208,7 +209,7 @@ void loop() {
   static uint32_t lastRenderMs = 0;
   uint32_t renderInterval = RENDER_INTERVAL_ACTIVE_MS;
   bool boosting = isBoosting(now);
-  bool idle = !isGameOver && !isUnloading && !radarActive && !boosting
+  bool idle = !isGameOver && !isUnloading && !radarActive && !radarFullActive && !boosting
               && (wingSpeed < 0.05f) && !anyTrailAlive() && !anyBeltAlive() && !anyScorePopupAlive();
   if (idle) renderInterval = RENDER_INTERVAL_IDLE_MS;
 

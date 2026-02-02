@@ -10,6 +10,7 @@ uint32_t radarUntilMs = 0;
 int32_t radarTargetWX = 0;
 int32_t radarTargetWY = 0;
 bool radarToHive = false;
+bool radarFullActive = false;  // Persistent radar when carrying max pollen
 
 // -------------------- RADAR PING --------------------
 void beginRadarPing(uint32_t nowMs) {
@@ -47,6 +48,19 @@ void updateRadar(uint32_t nowMs) {
   }
 }
 
+// -------------------- FULL RADAR (AUTO) --------------------
+void updateFullRadar() {
+  // Activate persistent radar when at max pollen capacity
+  if (pollenCount >= MAX_POLLEN_CARRY) {
+    radarFullActive = true;
+    radarTargetWX = 0;  // Hive is at origin
+    radarTargetWY = 0;
+    radarToHive = true;
+  } else {
+    radarFullActive = false;
+  }
+}
+
 // -------------------- RESET --------------------
 void resetRadar() {
   radarActive = false;
@@ -54,4 +68,5 @@ void resetRadar() {
   radarTargetWX = 0;
   radarTargetWY = 0;
   radarToHive = false;
+  radarFullActive = false;
 }
