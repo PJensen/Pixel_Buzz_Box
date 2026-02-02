@@ -19,6 +19,9 @@ float survivalFlashEndPct = 0.0f;
 void updateSurvivalTimer(float dt, uint32_t nowMs) {
   if (isGameOver) return;
 
+  // Pause survival timer during magnet (cinematic moment!)
+  if (isMagnetActive(nowMs)) return;
+
   survivalTimeLeft -= dt;
   if (survivalTimeLeft <= 0.0f) {
     survivalTimeLeft = 0.0f;

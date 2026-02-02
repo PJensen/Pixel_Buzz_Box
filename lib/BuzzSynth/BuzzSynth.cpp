@@ -2,24 +2,16 @@
 #include "BuzzSynth.h"
 #include <math.h>
 
-// Hash function for jitter
-static uint32_t hash32(uint32_t x) {
-  x ^= x >> 16;
-  x *= 0x7feb352du;
-  x ^= x >> 15;
-  x *= 0x846ca68bu;
-  x ^= x >> 16;
-  return x;
-}
-
-BuzzSynth::BuzzSynth(int buzzerPin) : _pin(buzzerPin) {
+BuzzSynth::BuzzSynth(int buzzerPin) : _pin(buzzerPin), _enabled(true) {
   memset(&snd, 0, sizeof(snd));
   snd.mode = SND_IDLE;
 }
 
 void BuzzSynth::begin() {
+#if SOUND_ENABLED
   pinMode(_pin, OUTPUT);
   digitalWrite(_pin, LOW);
+#endif
 }
 
 float BuzzSynth::clampf(float v, float lo, float hi) {
@@ -35,6 +27,10 @@ int BuzzSynth::clampi(int v, int lo, int hi) {
 }
 
 void BuzzSynth::startSound(SndMode mode, uint32_t nowMs) {
+#if !SOUND_ENABLED
+  return;
+#endif
+  if (!_enabled) return;
   snd.mode = mode;
   snd.step = 0;
   snd.nextMs = nowMs;
@@ -42,6 +38,10 @@ void BuzzSynth::startSound(SndMode mode, uint32_t nowMs) {
 }
 
 void BuzzSynth::updateSound(uint32_t nowMs) {
+#if !SOUND_ENABLED
+  return;
+#endif
+  if (!_enabled) return;
   if (snd.mode == SND_IDLE) return;
   if ((int32_t)(nowMs - snd.nextMs) < 0) return;
 
@@ -136,6 +136,37 @@ void BuzzSynth::updateSound(uint32_t nowMs) {
       }
       break;
 
+    case SND_MAGNET_ACTIVATE:
+      // Ascending whoosh: 400Hz -> 800Hz over ~200ms
+      if (snd.step == 0) {
+        snd.lastEventFreq = 400.0f;
+        tone(_pin, 400, 50);
+        snd.nextMs = nowMs + 50;
+        snd.step++;
+      } else if (snd.step == 1) {
+        snd.lastEventFreq = 550.0f;
+        tone(_pin, 550, 50);
+        snd.nextMs = nowMs + 50;
+        snd.step++;
+      } else if (snd.step == 2) {
+        snd.lastEventFreq = 700.0f;
+        tone(_pin, 700, 50);
+        snd.nextMs = nowMs + 50;
+        snd.step++;
+      } else if (snd.step == 3) {
+        snd.lastEventFreq = 800.0f;
+        tone(_pin, 800, 60);
+        snd.nextMs = nowMs + 70;
+        snd.step++;
+      } else {
+        noTone(_pin);
+        snd.eventTailFreq = snd.lastEventFreq;
+        snd.eventTailStartMs = nowMs;
+        snd.eventTailUntilMs = nowMs + 150;
+        snd.mode = SND_IDLE;
+      }
+      break;
+
     default:
       snd.mode = SND_IDLE;
       noTone(_pin);
@@ -149,6 +180,10 @@ bool BuzzSynth::soundBusy() const {
 
 void BuzzSynth::updateAmbient(uint32_t nowMs, float dt, float wingSpeed,
                                float vx, float vy, float speed) {
+#if !SOUND_ENABLED
+  return;
+#endif
+  if (!_enabled) return;
   if (soundBusy()) return;
 
   // Calculate heading and turn rate
@@ -252,7 +287,9 @@ void BuzzSynth::updateAmbient(uint32_t nowMs, float dt, float wingSpeed,
 }
 
 void BuzzSynth::stopAll() {
+#if SOUND_ENABLED
   noTone(_pin);
+#endif
   snd.mode = SND_IDLE;
   snd.eventTailUntilMs = 0;
   snd.ambientEnv = 0.0f;
@@ -261,6 +298,10 @@ void BuzzSynth::stopAll() {
 }
 
 void BuzzSynth::playUnloadTone(uint16_t freq, uint16_t durationMs) {
+#if !SOUND_ENABLED
+  return;
+#endif
+  if (!_enabled) return;
   snd.lastUnloadFreq = (float)freq;
   tone(_pin, freq, durationMs);
 }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "../../include/constants.h"
 
 // Sound modes
 enum SndMode : uint8_t {
@@ -11,6 +12,7 @@ enum SndMode : uint8_t {
   SND_RADAR,
   SND_POLLEN_CHIRP,
   SND_POWERUP,
+  SND_MAGNET_ACTIVATE,
 };
 
 // Sound state structure
@@ -73,8 +75,13 @@ public:
   SoundState& getState() { return snd; }
   const SoundState& getState() const { return snd; }
 
+  // Runtime sound enable/disable
+  void setEnabled(bool e) { _enabled = e; if (!e) stopAll(); }
+  bool isEnabled() const { return _enabled; }
+
 private:
   int _pin;
+  bool _enabled;
   SoundState snd;
 
   // Internal clamp helper

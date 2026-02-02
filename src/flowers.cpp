@@ -160,8 +160,8 @@ bool tryCollectPollen(uint32_t nowMs) {
     int32_t dy = by - f.wy;
     int32_t hitR = (int32_t)f.r + BEE_HIT_RADIUS;
 
-    // Pollen Magnet: 2x collection range
-    if (pollenMagnetActive) {
+    // Active magnet increases collection radius (easier to catch pulled flowers)
+    if (isMagnetActive(nowMs)) {
       hitR *= 2;
     }
 
@@ -201,6 +201,61 @@ bool tryCollectPollen(uint32_t nowMs) {
     }
   }
   return false;
+}
+
+// -------------------- FLOWER PHYSICS (MAGNET PULL) --------------------
+void updateFlowerPhysics(float dt, uint32_t nowMs) {
+  if (!isMagnetActive(nowMs)) return;
+
+  static uint32_t lastParticleMs[FLOWER_N] = {0};
+
+  for (int i = 0; i < FLOWER_N; i++) {
+    Flower &f = flowers[i];
+    if (!f.alive) continue;
+
+    // Calculate distance to bee
+    int32_t dx = (int32_t)beeWX - f.wx;
+    int32_t dy = (int32_t)beeWY - f.wy;
+    int32_t distSq = dx*dx + dy*dy;
+
+    // Only pull within radius
+    if (distSq > (MAGNET_PULL_RADIUS * MAGNET_PULL_RADIUS)) continue;
+
+    float dist = sqrtf((float)distSq);
+    if (dist < 1.0f) continue;  // Avoid division by zero
+
+    // Normalize direction
+    float ux = (float)dx / dist;
+    float uy = (float)dy / dist;
+
+    // Calculate pull force (stronger when closer, scaled by magnetStrength)
+    float falloff = 1.0f - (dist / (float)MAGNET_PULL_RADIUS);
+    float force = MAGNET_SPRING_K * falloff * magnetStrength;
+
+    // Apply force to flower position
+    float moveX = ux * force * dt * 60.0f;  // Scale for frame-rate independence
+    float moveY = uy * force * dt * 60.0f;
+
+    f.wx += (int32_t)moveX;
+    f.wy += (int32_t)moveY;
+
+    // Spawn particle trail during pull (visual feedback) - more frequent for better animation
+    if ((nowMs - lastParticleMs[i]) > 60) {  // Faster particle spawn (was 100ms, now 60ms)
+      float particleStrength = clampf(force / MAGNET_SPRING_K, 0.4f, 1.0f);
+
+      // Spawn particle at flower position showing direction of pull
+      spawnTrailParticle((float)f.wx, (float)f.wy, particleStrength, nowMs, 4); // variant 4 = cyan
+
+      // Add second particle slightly behind for motion trail effect
+      if (dist > 30.0f) {
+        float trailX = (float)f.wx - (ux * 5.0f);
+        float trailY = (float)f.wy - (uy * 5.0f);
+        spawnTrailParticle(trailX, trailY, particleStrength * 0.7f, nowMs, 4);
+      }
+
+      lastParticleMs[i] = nowMs;
+    }
+  }
 }
 
 // -------------------- TARGETING --------------------

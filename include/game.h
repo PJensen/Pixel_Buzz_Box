@@ -52,6 +52,7 @@ void spawnFlowerElsewhere(int i);
 void initFlowers();
 bool tryCollectPollen(uint32_t nowMs);
 bool findNearestFlower(int32_t &outWX, int32_t &outWY);
+void updateFlowerPhysics(float dt, uint32_t nowMs);
 
 // ==================== HIVE (hive.cpp) ====================
 extern bool isUnloading;
@@ -65,6 +66,11 @@ extern float bonusPoints;
 extern uint16_t totalBonusCharges;
 extern bool pollenMagnetActive;
 extern uint32_t bonusFlashUntilMs;
+extern bool magnetActive;
+extern uint32_t magnetActiveUntilMs;
+extern uint32_t magnetCooldownUntilMs;
+extern uint16_t magnetChargesConsumed;
+extern float magnetStrength;
 
 void spawnBeltItem(uint32_t nowMs);
 void updateBeltLifetimes(uint32_t nowMs);
@@ -74,6 +80,11 @@ void updateUnload(uint32_t nowMs);
 void tryStoreAtHive(uint32_t nowMs);
 void updateBonusSystem();
 float getScoreMultiplier();
+bool isMagnetActive(uint32_t nowMs);
+bool isMagnetOnCooldown(uint32_t nowMs);
+bool canActivateMagnet(uint32_t nowMs);
+void triggerMagnet(uint32_t nowMs);
+void updateMagnet(uint32_t nowMs);
 void resetHive();
 
 // ==================== RADAR (radar.cpp) ====================

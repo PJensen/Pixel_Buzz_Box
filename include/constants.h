@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+// -------------------- SOUND --------------------
+#define SOUND_ENABLED 0  // Set to 0 to disable all sound at compile time
+
 // -------------------- DISPLAY --------------------
 static const int CANVAS_W = 120;
 static const int CANVAS_H = 80;
@@ -112,6 +115,17 @@ static const int JOY_DEADZONE = 35;
 static const int JOY_CALIBRATION_SAMPLES = 40;
 static const int JOY_CALIBRATION_DELAY_MS = 30;
 static const float JOY_DOWN_BOOST = 1.20f;
+
+// -------------------- MAGNET ABILITY --------------------
+static const uint8_t MAGNET_MIN_CHARGES = 1;          // Minimum charges to activate
+static const uint32_t MAGNET_BASE_DURATION_MS = 800;  // Base duration at 1 charge
+static const uint32_t MAGNET_DURATION_PER_CHARGE = 400; // Extra time per charge
+static const uint32_t MAGNET_COOLDOWN_MS = 4000;      // Cooldown after use
+static const float MAGNET_BASE_STRENGTH = 1.5f;       // Pull force at 1 charge
+static const float MAGNET_STRENGTH_PER_CHARGE = 0.3f; // Extra force per charge
+static const float MAGNET_MAX_STRENGTH = 3.0f;        // Cap on pull strength
+static const int MAGNET_PULL_RADIUS = 140;            // Max distance to pull from
+static const float MAGNET_SPRING_K = 12.0f;           // Spring constant for pull (slower, more cinematic)
 
 // -------------------- RGB565 HELPER --------------------
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {

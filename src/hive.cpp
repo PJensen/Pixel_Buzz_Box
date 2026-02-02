@@ -25,6 +25,13 @@ uint16_t lastMagnetActivationThreshold = 0;
 bool pollenMagnetActive = false;
 uint32_t bonusFlashUntilMs = 0;
 
+// -------------------- MAGNET ABILITY STATE --------------------
+bool magnetActive = false;
+uint32_t magnetActiveUntilMs = 0;
+uint32_t magnetCooldownUntilMs = 0;
+uint16_t magnetChargesConsumed = 0;
+float magnetStrength = 1.0f;
+
 // -------------------- BELT STATE --------------------
 BeltItem beltItems[BELT_ITEM_N];
 
@@ -111,13 +118,6 @@ void updateUnload(uint32_t nowMs) {
   // Update bonus system
   updateBonusSystem();
 
-  // Deactivate magnet if it was active (trip complete)
-  // Then check if we should activate for next trip
-  if (pollenMagnetActive) {
-    pollenMagnetActive = false;
-  }
-  checkAndActivateMagnet();
-
   SoundState& snd = buzzer.getState();
   if (snd.lastUnloadFreq > 0.0f) {
     buzzer.setEventTail(nowMs, snd.lastUnloadFreq, EVENT_TAIL_MS);
@@ -145,24 +145,69 @@ void updateBonusSystem() {
 
   // Update display progress (0-2 for "x3 N/3" display)
   depositsTowardBoost = (uint8_t)(totalBonusCharges % BONUS_CHARGES_PER_ABILITY);
-
-  // Update boost charge indicator (shows if ability is ready)
-  boostCharge = pollenMagnetActive ? 1 : 0;
-}
-
-void checkAndActivateMagnet() {
-  // Calculate current ability threshold (which multiple of 3 are we at/past?)
-  uint16_t currentThreshold = (totalBonusCharges / BONUS_CHARGES_PER_ABILITY) * BONUS_CHARGES_PER_ABILITY;
-
-  // Activate if we've reached a new threshold
-  if (!pollenMagnetActive && currentThreshold >= BONUS_CHARGES_PER_ABILITY && currentThreshold > lastMagnetActivationThreshold) {
-    pollenMagnetActive = true;
-    lastMagnetActivationThreshold = currentThreshold;
-  }
 }
 
 float getScoreMultiplier() {
   return 1.0f + ((float)totalBonusCharges * BONUS_MULTIPLIER_PER_CHARGE);
+}
+
+// -------------------- MAGNET ABILITY FUNCTIONS --------------------
+bool isMagnetActive(uint32_t nowMs) {
+  return magnetActive && ((int32_t)(nowMs - magnetActiveUntilMs) < 0);
+}
+
+bool isMagnetOnCooldown(uint32_t nowMs) {
+  return (int32_t)(magnetCooldownUntilMs - nowMs) > 0;
+}
+
+bool canActivateMagnet(uint32_t nowMs) {
+  return totalBonusCharges >= MAGNET_MIN_CHARGES
+         && !isMagnetActive(nowMs)
+         && !isMagnetOnCooldown(nowMs)
+         && !isUnloading;
+}
+
+void triggerMagnet(uint32_t nowMs) {
+  if (!canActivateMagnet(nowMs)) return;
+
+  // Consume ALL available charges
+  magnetChargesConsumed = totalBonusCharges;
+
+  // Calculate duration (scales linearly)
+  uint32_t duration = MAGNET_BASE_DURATION_MS
+                     + (magnetChargesConsumed * MAGNET_DURATION_PER_CHARGE);
+
+  // Calculate strength (scales with diminishing returns, capped)
+  magnetStrength = MAGNET_BASE_STRENGTH
+                  + ((float)magnetChargesConsumed * MAGNET_STRENGTH_PER_CHARGE);
+  magnetStrength = clampf(magnetStrength, MAGNET_BASE_STRENGTH, MAGNET_MAX_STRENGTH);
+
+  // Set timing
+  magnetActiveUntilMs = nowMs + duration;
+  magnetCooldownUntilMs = nowMs + duration + MAGNET_COOLDOWN_MS;
+  magnetActive = true;
+
+  // Deduct charges from pool
+  bonusPoints -= (float)magnetChargesConsumed * BONUS_SECONDS_PER_CHARGE;
+  totalBonusCharges = 0;
+  depositsTowardBoost = 0;
+
+  // Visual/audio feedback
+  triggerCameraShake(nowMs, 5.0f, 300);
+  if (!buzzer.soundBusy()) {
+    buzzer.startSound(SND_MAGNET_ACTIVATE, nowMs);
+  }
+}
+
+void updateMagnet(uint32_t nowMs) {
+  if (!magnetActive) return;
+
+  // Check expiration
+  if ((int32_t)(nowMs - magnetActiveUntilMs) >= 0) {
+    magnetActive = false;
+    magnetChargesConsumed = 0;
+    magnetStrength = 1.0f;
+  }
 }
 
 // -------------------- HIVE INTERACTION --------------------
@@ -190,5 +235,10 @@ void resetHive() {
   lastMagnetActivationThreshold = 0;
   pollenMagnetActive = false;
   bonusFlashUntilMs = 0;
+  magnetActive = false;
+  magnetActiveUntilMs = 0;
+  magnetCooldownUntilMs = 0;
+  magnetChargesConsumed = 0;
+  magnetStrength = 1.0f;
   for (int i = 0; i < BELT_ITEM_N; i++) beltItems[i].alive = 0;
 }

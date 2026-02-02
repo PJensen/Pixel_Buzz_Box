@@ -216,6 +216,29 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
       g.drawPixel(x + sparkDist - 2, y + sparkDist - 2, COL_WHITE);
     }
   }
+
+  // Magnetic pull effect - pulsing cyan glow when being pulled
+  if (isMagnetActive(nowMs)) {
+    // Check if flower is within pull radius
+    int32_t dx = f.wx - (int32_t)beeWX;
+    int32_t dy = f.wy - (int32_t)beeWY;
+    int32_t distSq = dx*dx + dy*dy;
+
+    if (distSq <= (MAGNET_PULL_RADIUS * MAGNET_PULL_RADIUS)) {
+      // Pulsing effect
+      float pulse = sinf((float)nowMs * 0.012f);
+      int glowRadius = r + 3 + (int)(pulse * 2.0f);
+
+      // Cyan magnetic glow
+      uint16_t magnetGlow = rgb565(100, 200, 255);
+      g.drawCircle(x, y, glowRadius, magnetGlow);
+
+      // Extra ring when pulse is strong
+      if (pulse > 0.5f) {
+        g.drawCircle(x, y, glowRadius + 2, rgb565(150, 220, 255));
+      }
+    }
+  }
 }
 
 // -------------------- TRAIL PARTICLES --------------------
@@ -239,6 +262,11 @@ void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
       baseR = 255;
       baseG = (uint8_t)(220 - (int)(30.0f * t));  // Fade from gold to deep gold
       baseB = (uint8_t)(100 - (int)(50.0f * t));
+    } else if (trail[i].variant == 4) {
+      // Variant 4 = cyan particles for magnet
+      baseR = (uint8_t)(100 + (int)(80.0f * (1.0f - t)));
+      baseG = (uint8_t)(200 + (int)(55.0f * (1.0f - t)));
+      baseB = 255;
     } else {
       float speedT = trail[i].speedN;
       baseR = (uint8_t)(255 - (int)(115.0f * speedT));
@@ -582,36 +610,98 @@ static void drawHUDInTile(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy)
     g.print(multText);
   }
 
-  g.setTextColor(boostCharge ? COL_UI_GO : COL_UI_DIM);
-  const char* boostText = boostCharge ? "MAGNET READY" : "MAGNET --";
-  int boostW = (int)strlen(boostText) * 6;
-  g.setCursor(rightX - boostW, line1Y);
-  g.print(boostText);
-
+  // Magnet status display
   uint32_t now = millis();
-  bool cd = (int32_t)(boostCooldownUntilMs - now) > 0;
+  bool magnetCooldown = isMagnetOnCooldown(now);
+  bool magnetReady = canActivateMagnet(now);
   bool bonusFlash = (int32_t)(bonusFlashUntilMs - now) > 0;
 
-  if (cd) {
+  if (isMagnetActive(now)) {
+    // Show active state with charge count
+    g.setTextColor(COL_WING);  // Cyan color
+    char magnetText[16];
+    snprintf(magnetText, sizeof(magnetText), "MAG [%d]", (int)magnetChargesConsumed);
+    int magnetW = (int)strlen(magnetText) * 6;
+    g.setCursor(rightX - magnetW, line1Y);
+    g.print(magnetText);
+
+    // Show time remaining on line 2
+    uint32_t timeLeftMs = magnetActiveUntilMs - now;
+    float timeLeftSec = (float)timeLeftMs / 1000.0f;
+    char timeText[12];
+    snprintf(timeText, sizeof(timeText), "%.1fs", timeLeftSec);
+    int timeW = (int)strlen(timeText) * 6;
+    g.setCursor(rightX - timeW, line2Y);
+    g.print(timeText);
+
+  } else if (magnetCooldown) {
+    // Show cooldown
     g.setTextColor(COL_UI_WARN);
-    const char* cdText = "COOLDN";
+    const char* cdText = "MAG CD";
     int cdW = (int)strlen(cdText) * 6;
-    g.setCursor(rightX - cdW, line2Y);
+    g.setCursor(rightX - cdW, line1Y);
     g.print(cdText);
-  } else if (bonusFlash) {
-    // Flash "BONUS!" when overage collected
-    g.setTextColor(COL_POLLEN_HI);
-    const char* bonusText = "BONUS!";
-    int bonusW = (int)strlen(bonusText) * 6;
-    g.setCursor(rightX - bonusW, line2Y);
-    g.print(bonusText);
+
+    // Show charges accumulating during cooldown
+    if (bonusFlash) {
+      // Flash "BONUS!" when overage collected
+      g.setTextColor(COL_POLLEN_HI);
+      const char* bonusText = "BONUS!";
+      int bonusW = (int)strlen(bonusText) * 6;
+      g.setCursor(rightX - bonusW, line2Y);
+      g.print(bonusText);
+    } else {
+      g.setTextColor(COL_UI_DIM);
+      char chargeText[12];
+      snprintf(chargeText, sizeof(chargeText), "[%d]", (int)totalBonusCharges);
+      int chargeW = (int)strlen(chargeText) * 6;
+      g.setCursor(rightX - chargeW, line2Y);
+      g.print(chargeText);
+    }
+
+  } else if (magnetReady) {
+    // Show ready state with charge count
+    g.setTextColor(COL_UI_GO);
+    char readyText[16];
+    snprintf(readyText, sizeof(readyText), "MAG [%d]", (int)totalBonusCharges);
+    int readyW = (int)strlen(readyText) * 6;
+    g.setCursor(rightX - readyW, line1Y);
+    g.print(readyText);
+
+    // Pulsing "READY" indicator
+    if ((now % 600) < 300) {
+      g.setTextColor(COL_POLLEN_HI);
+      const char* goText = "READY!";
+      int goW = (int)strlen(goText) * 6;
+      g.setCursor(rightX - goW, line2Y);
+      g.print(goText);
+    }
+
   } else {
+    // Not ready (less than 1 charge)
     g.setTextColor(COL_UI_DIM);
-    char boostCount[12];
-    snprintf(boostCount, sizeof(boostCount), "x3 %d/%d", (int)depositsTowardBoost, BONUS_CHARGES_PER_ABILITY);
-    int boostCountW = (int)strlen(boostCount) * 6;
-    g.setCursor(rightX - boostCountW, line2Y);
-    g.print(boostCount);
+    const char* notReadyText = "MAG --";
+    int notReadyW = (int)strlen(notReadyText) * 6;
+    g.setCursor(rightX - notReadyW, line1Y);
+    g.print(notReadyText);
+
+    // Show progress toward first charge
+    if (bonusFlash) {
+      // Flash "BONUS!" when overage collected
+      g.setTextColor(COL_POLLEN_HI);
+      const char* bonusText = "BONUS!";
+      int bonusW = (int)strlen(bonusText) * 6;
+      g.setCursor(rightX - bonusW, line2Y);
+      g.print(bonusText);
+    } else {
+      g.setTextColor(COL_UI_DIM);
+      float progress = bonusPoints / BONUS_SECONDS_PER_CHARGE;
+      char progressText[12];
+      snprintf(progressText, sizeof(progressText), "%.1f/%.0f", progress, BONUS_SECONDS_PER_CHARGE);
+      int progressW = (int)strlen(progressText) * 6;
+      g.setCursor(rightX - progressW, line2Y);
+      g.print(progressText);
+    }
   }
 
   g.setTextWrap(true);
@@ -907,6 +997,126 @@ static void drawRadarOverlay(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   g.print((int)len);
 }
 
+static void drawMagneticField(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  if (!isMagnetActive(nowMs)) return;
+
+  int cx = beeScreenCX() + ox;
+  int cy = beeScreenCY() + oy;
+
+  // Pulsing animation (faster with more charges)
+  float pulseFreq = 3.0f + ((float)magnetChargesConsumed * 0.5f);
+  float pulse = sinf((float)nowMs * 0.001f * pulseFreq);
+
+  // Multiple concentric rings (more rings = more charges)
+  int ringCount = clampi(2 + (int)(magnetChargesConsumed / 3), 2, 5);
+
+  for (int i = 0; i < ringCount; i++) {
+    float ringPhase = (float)i / (float)ringCount;
+    float animPhase = fmodf(((float)nowMs * 0.003f) + ringPhase, 1.0f);
+
+    // Ring expands and fades
+    int baseRadius = 20 + (i * 12);
+    int r = baseRadius + (int)(animPhase * 30.0f);
+
+    // Color: Cyan to purple gradient based on strength
+    uint8_t red = clampu8(100 + (int)(magnetStrength * 40.0f));
+    uint8_t green = clampu8(180 + (int)(pulse * 40.0f));
+    uint8_t blue = 255;
+
+    // Alpha fade based on animation
+    float alpha = 1.0f - animPhase;
+    red = (uint8_t)(red * alpha);
+    green = (uint8_t)(green * alpha);
+    blue = (uint8_t)(blue * alpha);
+
+    uint16_t ringColor = rgb565(red, green, blue);
+
+    // Draw ring with thickness based on strength
+    g.drawCircle(cx, cy, r, ringColor);
+    if (magnetStrength > 2.0f) {
+      g.drawCircle(cx, cy, r + 1, ringColor);
+    }
+
+    // Sparkles on outer ring
+    if (i == ringCount - 1 && ((nowMs + (i * 100)) % 200) < 100) {
+      int sparkleCount = 8;
+      for (int s = 0; s < sparkleCount; s++) {
+        float angle = (float)s * (6.2831853f / sparkleCount) + (float)nowMs * 0.003f;
+        int sx = cx + (int)(cosf(angle) * (float)r);
+        int sy = cy + (int)(sinf(angle) * (float)r);
+        g.drawPixel(sx, sy, COL_WHITE);
+      }
+    }
+  }
+
+  // Central glow
+  uint16_t coreColor = rgb565(150, 220, 255);
+  int coreRadius = 8 + (int)(pulse * 2.0f);
+  g.fillCircle(cx, cy, coreRadius, coreColor);
+  g.drawCircle(cx, cy, coreRadius + 2, COL_WHITE);
+
+  // Field lines to nearby flowers - ENHANCED for dramatic effect
+  for (int i = 0; i < FLOWER_N; i++) {
+    if (!flowers[i].alive) continue;
+
+    int32_t dx = flowers[i].wx - (int32_t)beeWX;
+    int32_t dy = flowers[i].wy - (int32_t)beeWY;
+    int32_t dist = (int32_t)sqrtf((float)(dx*dx + dy*dy));
+
+    if (dist > MAGNET_PULL_RADIUS) continue;
+
+    int fx, fy;
+    worldToScreen(flowers[i].wx, flowers[i].wy, fx, fy);
+
+    // Animated flowing line showing pull direction
+    float offset = (float)((nowMs / 30) % 6);  // Faster animation
+    float lineDist = sqrtf((float)((fx-cx)*(fx-cx) + (fy-cy)*(fy-cy)));
+    if (lineDist < 1.0f) continue;
+    float ux = (float)(fx - cx) / lineDist;
+    float uy = (float)(fy - cy) / lineDist;
+
+    // Calculate line brightness based on pull strength
+    float distNorm = (float)dist / (float)MAGNET_PULL_RADIUS;
+    float brightness = 1.0f - (distNorm * 0.5f);
+
+    // Draw thicker animated line segments
+    for (float d = offset; d < lineDist; d += 6.0f) {
+      float segmentT = d / lineDist;
+      int sx = cx + (int)(ux * d);
+      int sy = cy + (int)(uy * d);
+
+      // Gradient from bee (bright cyan) to flower (dimmer)
+      uint8_t r = (uint8_t)(120 + (int)((1.0f - segmentT) * 80.0f * brightness));
+      uint8_t green = (uint8_t)(220 + (int)((1.0f - segmentT) * 35.0f * brightness));
+      uint8_t b = 255;
+      uint16_t lineColor = rgb565(r, green, b);
+
+      // Draw thicker line (3 pixels)
+      g.drawPixel(sx, sy, lineColor);
+      g.drawPixel(sx + 1, sy, lineColor);
+      g.drawPixel(sx, sy + 1, lineColor);
+
+      // Extra brightness at line segments
+      if (((int)d % 12) < 3) {
+        g.drawPixel(sx - 1, sy, COL_WHITE);
+        g.drawPixel(sx, sy - 1, COL_WHITE);
+      }
+    }
+
+    // Draw arrow at flower end showing pull direction
+    int arrowDist = (int)(lineDist * 0.85f);
+    int arrowX = fx - (int)(ux * (float)arrowDist);
+    int arrowY = fy - (int)(uy * (float)arrowDist);
+
+    // Arrow head pointing toward bee
+    int px = (int)(-uy * 3.0f);
+    int py = (int)(ux * 3.0f);
+    uint16_t arrowColor = rgb565(150, 230, 255);
+    g.drawLine(arrowX - px, arrowY - py, arrowX, arrowY, arrowColor);
+    g.drawLine(arrowX + px, arrowY + py, arrowX, arrowY, arrowColor);
+  }
+}
+
 // -------------------- RENDER FRAME --------------------
 void renderFrame(uint32_t nowMs) {
   int hiveSX, hiveSY;
@@ -957,6 +1167,7 @@ void renderFrame(uint32_t nowMs) {
       drawBeeShadow(canvas, bcX + ox, bcY + oy + bob);
       drawBee(canvas, bcX + ox, bcY + oy + bob);
       drawPollenSparkles(canvas, bcX + ox, bcY + oy + bob, nowMs);
+      drawMagneticField(canvas, ox, oy, nowMs);
       drawScorePopups(canvas, ox, oy, nowMs);
 
       drawRadarOverlay(canvas, ox, oy, nowMs);

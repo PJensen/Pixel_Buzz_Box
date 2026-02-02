@@ -56,11 +56,18 @@ void updateBeePhysics(float nx, float ny, int rawDx, int rawDy, float dt, bool b
   float forceX = springK * (targetWX - beeWX) - damping * beeVX;
   float forceY = springK * (targetWY - beeWY) - damping * beeVY;
 
-  beeVX += forceX * dt;
-  beeVY += forceY * dt;
+  // Slow bee movement during magnet (cinematic focus on pull effect)
+  uint32_t now = millis();
+  float movementScale = 1.0f;
+  if (isMagnetActive(now)) {
+    movementScale = 0.3f;  // 30% speed during magnet
+  }
 
-  beeWX += beeVX * dt;
-  beeWY += beeVY * dt;
+  beeVX += forceX * dt * movementScale;
+  beeVY += forceY * dt * movementScale;
+
+  beeWX += beeVX * dt * movementScale;
+  beeWY += beeVY * dt * movementScale;
 }
 
 // -------------------- WING ANIMATION --------------------

@@ -179,12 +179,22 @@ void loop() {
   // Normal game input
   if (!isGameOver && !isUnloading) {
     if (edgeDown) {
-      if (!buzzer.soundBusy()) buzzer.startSound(SND_CLICK, now);
-      beginRadarPing(now);
+      if (canActivateMagnet(now)) {
+        // Priority 1: Magnet activation
+        triggerMagnet(now);
+      } else {
+        // Priority 2: Radar ping fallback
+        if (!buzzer.soundBusy()) buzzer.startSound(SND_CLICK, now);
+        beginRadarPing(now);
+      }
     }
 
     updateBeltLifetimes(now);
     updateRadar(now);
+    updateMagnet(now);
+    if (isMagnetActive(now)) {
+      updateFlowerPhysics(dt, now);
+    }
     tryCollectPollen(now);
     tryStoreAtHive(now);
 
