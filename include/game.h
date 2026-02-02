@@ -139,7 +139,20 @@ extern float survivalFlashEndPct;
 
 void updateSurvivalTimer(float dt, uint32_t nowMs);
 float addSurvivalTime(uint32_t nowMs, float amount);
+void applySurvivalPenalty(float amount);
 void resetSurvival();
+
+// ==================== WASP (wasp.cpp) ====================
+extern Wasp wasps[WASP_N];
+extern uint32_t beeInvulnUntilMs;
+
+void checkWaspSpawning(uint32_t nowMs);
+void updateWasps(uint32_t nowMs, float dt);
+bool checkWaspCollision(uint32_t nowMs);
+int killOnScreenWasps(uint32_t nowMs);
+bool isAnyWaspHunting();
+bool isBeeInvulnerable(uint32_t nowMs);
+void resetWasps();
 
 // ==================== GRAPHICS (graphics.cpp) ====================
 void renderFrame(uint32_t nowMs);

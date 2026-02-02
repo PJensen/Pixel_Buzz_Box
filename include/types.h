@@ -41,3 +41,22 @@ struct ScorePopup {
   float multiplier;     // Score multiplier
   uint8_t alive;
 };
+
+// -------------------- WASP (PREDATOR) --------------------
+enum WaspState : uint8_t {
+  WASP_PATROL = 0,      // Random wandering
+  WASP_HUNTING = 1,     // Chasing bee
+  WASP_STUNNED = 2      // After hitting bee (cooldown)
+};
+
+struct Wasp {
+  float wx, wy;           // World position
+  float vx, vy;           // Velocity
+  float targetWX, targetWY; // AI target point
+  uint8_t alive;
+  WaspState state;
+  float wingPhase;        // Animation
+  uint32_t stunnedUntilMs;
+  uint32_t lastStateChangeMs;
+  uint32_t deathMs;       // When wasp was killed (for respawn timing)
+};

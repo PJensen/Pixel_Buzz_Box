@@ -62,6 +62,7 @@ void setup() {
   resetVFX();
   resetSurvival();
   resetRadar();
+  resetWasps();
   initFlowers();
 
   renderFrame(millis());
@@ -160,6 +161,7 @@ void loop() {
     resetVFX();
     resetSurvival();
     resetRadar();
+    resetWasps();
     initFlowers();
 
     // Reset sound state
@@ -198,6 +200,15 @@ void loop() {
     }
     tryCollectPollen(now);
     tryStoreAtHive(now);
+
+    // Wasp (predator) updates
+    checkWaspSpawning(now);
+    updateWasps(now, dt);
+    if (checkWaspCollision(now)) {
+      // Wasp hit! Apply time penalty and effects
+      applySurvivalPenalty(WASP_TIME_PENALTY);
+      triggerCameraShake(now, 8.0f, 250);
+    }
 
     // Ambient wing buzz
     float speed = getBeeSpeed();

@@ -241,6 +241,118 @@ static void drawFlower(Adafruit_GFX &g, int x, int y, const Flower &f, uint32_t 
   }
 }
 
+// -------------------- WASP (PREDATOR) --------------------
+static void drawWasp(Adafruit_GFX &g, int x, int y, const Wasp &w, uint32_t nowMs) {
+  if (!w.alive) return;
+
+  // Wing animation (faster than bee)
+  float s = sinf(w.wingPhase);
+  int flap = (int)(s * 3.5f);
+
+  // Color varies by state - classic red and yellow wasp colors
+  uint16_t bodyColor, stripeColor;
+  if (w.state == WASP_STUNNED) {
+    // Stunned: desaturated
+    bodyColor = rgb565(120, 80, 80);
+    stripeColor = rgb565(180, 160, 100);
+  } else if (w.state == WASP_HUNTING) {
+    // Hunting: intense red with bright yellow
+    bodyColor = rgb565(220, 40, 40);
+    stripeColor = rgb565(255, 240, 60);
+  } else {
+    // Patrol: standard red and yellow
+    bodyColor = rgb565(180, 50, 50);
+    stripeColor = rgb565(255, 220, 40);
+  }
+
+  // Wings (thin, fast-moving)
+  uint16_t wingCol = rgb565(200, 200, 220);
+  g.drawEllipse(x - 4, y - 8 + flap, 5, 3, wingCol);
+  g.drawEllipse(x + 3, y - 9 - flap/2, 5, 3, wingCol);
+  if (w.state == WASP_HUNTING && ((nowMs / 50) % 2)) {
+    g.drawPixel(x - 6, y - 10 + flap, COL_WHITE);
+    g.drawPixel(x + 5, y - 11 - flap/2, COL_WHITE);
+  }
+
+  // Body (elongated, segmented)
+  g.fillEllipse(x, y, 10, 6, bodyColor);
+
+  // Stripes (classic wasp pattern)
+  g.fillRect(x - 7, y - 1, 2, 3, stripeColor);
+  g.fillRect(x - 3, y - 1, 2, 3, stripeColor);
+  g.fillRect(x + 2, y - 1, 2, 3, stripeColor);
+  g.fillRect(x + 6, y - 1, 2, 3, stripeColor);
+
+  // Outline
+  g.drawEllipse(x, y, 10, 6, COL_WHITE);
+
+  // Head (darker red)
+  g.fillCircle(x + 9, y - 1, 4, rgb565(120, 30, 30));
+  g.drawCircle(x + 9, y - 1, 4, COL_WHITE);
+
+  // Eyes (red, menacing)
+  uint16_t eyeColor = (w.state == WASP_HUNTING) ? rgb565(255, 60, 60) : rgb565(200, 80, 80);
+  g.drawPixel(x + 10, y - 3, eyeColor);
+  g.drawPixel(x + 10, y + 1, eyeColor);
+  if (w.state == WASP_HUNTING) {
+    g.drawPixel(x + 11, y - 2, eyeColor);
+    g.drawPixel(x + 11, y, eyeColor);
+  }
+
+  // Stinger (at back)
+  g.fillTriangle(x - 11, y, x - 15, y - 1, x - 15, y + 1, rgb565(40, 30, 20));
+
+  // Danger indicator when hunting
+  if (w.state == WASP_HUNTING && ((nowMs / 150) % 2)) {
+    uint16_t dangerColor = rgb565(255, 100, 100);
+    g.drawCircle(x, y, 14, dangerColor);
+  }
+
+  // Stunned indicator
+  if (w.state == WASP_STUNNED) {
+    // Stars spinning around head
+    float starPhase = (float)(nowMs % 600) / 600.0f * 6.2831853f;
+    for (int i = 0; i < 3; i++) {
+      float angle = starPhase + (float)i * 2.094395f;  // 120 degrees apart
+      int sx = x + (int)(cosf(angle) * 12.0f);
+      int sy = y - 6 + (int)(sinf(angle) * 6.0f);
+      g.drawPixel(sx, sy, COL_YEL);
+    }
+  }
+}
+
+static void drawWaspDangerIndicator(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
+  // Show warning when any wasp is hunting (edge-of-screen indicator if offscreen)
+  for (int i = 0; i < WASP_N; i++) {
+    if (!wasps[i].alive) continue;
+    if (wasps[i].state != WASP_HUNTING) continue;
+
+    int sx, sy;
+    worldToScreenF(wasps[i].wx, wasps[i].wy, sx, sy);
+
+    // If wasp is offscreen, show edge indicator
+    bool offscreen = (sx < -20 || sx > tft.width() + 20 ||
+                      sy < HUD_H - 20 || sy > tft.height() + 20);
+
+    if (offscreen) {
+      // Clamp to screen edge
+      int edgeX = clampi(sx, 10, tft.width() - 10);
+      int edgeY = clampi(sy, HUD_H + 10, tft.height() - 10);
+
+      // Blinking warning triangle
+      if ((nowMs / 200) % 2) {
+        uint16_t warnColor = rgb565(255, 80, 80);
+        g.fillTriangle(edgeX + ox, edgeY - 6 + oy,
+                       edgeX - 5 + ox, edgeY + 4 + oy,
+                       edgeX + 5 + ox, edgeY + 4 + oy, warnColor);
+        g.drawTriangle(edgeX + ox, edgeY - 6 + oy,
+                       edgeX - 5 + ox, edgeY + 4 + oy,
+                       edgeX + 5 + ox, edgeY + 4 + oy, COL_WHITE);
+      }
+    }
+  }
+}
+
 // -------------------- TRAIL PARTICLES --------------------
 void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
   const uint32_t TRAIL_LIFE_MS = 300;
@@ -267,6 +379,11 @@ void drawTrailParticles(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
       baseR = (uint8_t)(100 + (int)(80.0f * (1.0f - t)));
       baseG = (uint8_t)(200 + (int)(55.0f * (1.0f - t)));
       baseB = 255;
+    } else if (trail[i].variant == 5) {
+      // Variant 5 = red particles for wasp death
+      baseR = 255;
+      baseG = (uint8_t)(80 - (int)(60.0f * t));
+      baseB = (uint8_t)(80 - (int)(60.0f * t));
     } else {
       float speedT = trail[i].speedN;
       baseR = (uint8_t)(255 - (int)(115.0f * speedT));
@@ -1206,6 +1323,16 @@ void renderFrame(uint32_t nowMs) {
         if (sx < -30 || sx > tft.width() + 30 || sy < HUD_H - 30 || sy > tft.height() + 30) continue;
         drawFlower(canvas, sx + ox, sy + oy, flowers[i], nowMs, flowerBornMs[i]);
       }
+
+      // Draw wasps (predators)
+      for (int i = 0; i < WASP_N; i++) {
+        if (!wasps[i].alive) continue;
+        int sx, sy;
+        worldToScreenF(wasps[i].wx, wasps[i].wy, sx, sy);
+        if (sx < -30 || sx > tft.width() + 30 || sy < HUD_H - 30 || sy > tft.height() + 30) continue;
+        drawWasp(canvas, sx + ox, sy + oy, wasps[i], nowMs);
+      }
+      drawWaspDangerIndicator(canvas, ox, oy, nowMs);
 
       drawTrailParticles(canvas, ox, oy, nowMs);
 

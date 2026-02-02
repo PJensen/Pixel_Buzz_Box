@@ -127,6 +127,27 @@ static const float MAGNET_MAX_STRENGTH = 3.0f;        // Cap on pull strength
 static const int MAGNET_PULL_RADIUS = 140;            // Max distance to pull from
 static const float MAGNET_SPRING_K = 12.0f;           // Spring constant for pull (slower, more cinematic)
 
+// -------------------- WASP (PREDATOR) BEHAVIOR --------------------
+static const int WASP_N = 3;                          // Max active wasps
+static const int WASP_SPAWN_DIST_MIN = 150;           // Spawn distance from bee
+static const int WASP_SPAWN_DIST_MAX = 220;
+static const float WASP_PATROL_SPEED = 60.0f;         // Slow patrol speed
+static const float WASP_HUNT_SPEED = 140.0f;          // Fast chase speed
+static const float WASP_SPRING_K = 28.0f;             // Movement responsiveness
+static const float WASP_DAMPING = 10.0f;              // Movement damping
+static const int WASP_DETECTION_RADIUS = 100;         // Start chasing bee
+static const int WASP_LOSE_INTEREST_RADIUS = 200;     // Stop chasing bee
+static const int WASP_HIT_RADIUS = 18;                // Collision radius
+static const uint32_t WASP_STUN_DURATION_MS = 1500;   // Stunned after hitting bee
+static const float WASP_TIME_PENALTY = 2.0f;          // Seconds lost per hit
+static const uint32_t WASP_PATROL_CHANGE_MS = 2000;   // New patrol target interval
+static const int WASP_SPAWN_SCORE_1 = 5;              // First wasp at 5 points
+static const int WASP_SPAWN_SCORE_2 = 15;             // Second wasp at 15 points
+static const int WASP_SPAWN_SCORE_3 = 30;             // Third wasp at 30 points
+static const int WASP_PATROL_RADIUS = 120;            // Random patrol range
+static const uint32_t WASP_INVULN_MS = 1000;          // Bee invulnerability after hit
+static const uint32_t WASP_RESPAWN_DELAY_MS = 5000;   // Respawn delay after being killed
+
 // -------------------- RGB565 HELPER --------------------
 static inline uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
   return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);

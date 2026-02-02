@@ -45,6 +45,11 @@ float addSurvivalTime(uint32_t nowMs, float amount) {
   return overage;
 }
 
+// -------------------- TIME PENALTY (WASP HIT) --------------------
+void applySurvivalPenalty(float amount) {
+  survivalTimeLeft = clampf(survivalTimeLeft - amount, 0.0f, SURVIVAL_TIME_MAX);
+}
+
 // -------------------- RESET --------------------
 void resetSurvival() {
   pollenCount = 0;

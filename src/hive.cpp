@@ -115,6 +115,12 @@ void updateUnload(uint32_t nowMs) {
   isUnloading = false;
   unloadRemaining = 0;
 
+  // Kill any wasps visible on screen! Strategic mechanic.
+  int waspsKilled = killOnScreenWasps(nowMs);
+  if (waspsKilled > 0) {
+    triggerCameraShake(nowMs, 4.0f + (float)waspsKilled * 2.0f, 200);
+  }
+
   // Update bonus system
   updateBonusSystem();
 
