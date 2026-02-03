@@ -167,6 +167,63 @@ void BuzzSynth::updateSound(uint32_t nowMs) {
       }
       break;
 
+    case SND_WASP_HIT:
+      // Harsh descending buzz: 600Hz -> 200Hz (ouch!)
+      if (snd.step == 0) {
+        snd.lastEventFreq = 600.0f;
+        tone(_pin, 600, 60);
+        snd.nextMs = nowMs + 60;
+        snd.step++;
+      } else if (snd.step == 1) {
+        snd.lastEventFreq = 400.0f;
+        tone(_pin, 400, 80);
+        snd.nextMs = nowMs + 80;
+        snd.step++;
+      } else if (snd.step == 2) {
+        snd.lastEventFreq = 250.0f;
+        tone(_pin, 250, 100);
+        snd.nextMs = nowMs + 110;
+        snd.step++;
+      } else {
+        noTone(_pin);
+        snd.eventTailFreq = snd.lastEventFreq;
+        snd.eventTailStartMs = nowMs;
+        snd.eventTailUntilMs = nowMs + 120;
+        snd.mode = SND_IDLE;
+      }
+      break;
+
+    case SND_WASP_KILL:
+      // Ascending crunch-pop: 300Hz -> 1100Hz (victory!)
+      if (snd.step == 0) {
+        snd.lastEventFreq = 300.0f;
+        tone(_pin, 300, 40);
+        snd.nextMs = nowMs + 40;
+        snd.step++;
+      } else if (snd.step == 1) {
+        snd.lastEventFreq = 500.0f;
+        tone(_pin, 500, 35);
+        snd.nextMs = nowMs + 35;
+        snd.step++;
+      } else if (snd.step == 2) {
+        snd.lastEventFreq = 800.0f;
+        tone(_pin, 800, 30);
+        snd.nextMs = nowMs + 30;
+        snd.step++;
+      } else if (snd.step == 3) {
+        snd.lastEventFreq = 1100.0f;
+        tone(_pin, 1100, 25);
+        snd.nextMs = nowMs + 35;
+        snd.step++;
+      } else {
+        noTone(_pin);
+        snd.eventTailFreq = snd.lastEventFreq;
+        snd.eventTailStartMs = nowMs;
+        snd.eventTailUntilMs = nowMs + 120;
+        snd.mode = SND_IDLE;
+      }
+      break;
+
     default:
       snd.mode = SND_IDLE;
       noTone(_pin);

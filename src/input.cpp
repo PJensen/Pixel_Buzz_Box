@@ -2,11 +2,13 @@
 #include "game.h"
 
 // -------------------- INPUT STATE --------------------
-int joyCenterX = JOY_CENTER_DEFAULT;
-int joyCenterY = JOY_CENTER_DEFAULT;
-int joyMinY = 1023;
-int joyMaxY = 0;
-bool btnPrev = false;
+InputState input = {
+  .centerX = Input::JOY_CENTER_DEFAULT,
+  .centerY = Input::JOY_CENTER_DEFAULT,
+  .minY = 1023,
+  .maxY = 0,
+  .btnPrev = false
+};
 
 // -------------------- RAW READING --------------------
 int readJoyX() { return analogRead(PIN_JOY_VRX); }
@@ -22,14 +24,14 @@ int applyDeadzone(int v, int center, int dz) {
 
 void calibrateJoystick() {
   long sx = 0, sy = 0;
-  delay(JOY_CALIBRATION_DELAY_MS);
-  for (int i = 0; i < JOY_CALIBRATION_SAMPLES; i++) {
+  delay(Input::CALIBRATION_DELAY_MS);
+  for (int i = 0; i < Input::CALIBRATION_SAMPLES; i++) {
     sx += readJoyX();
     sy += readJoyY();
-    delay(LOOP_DELAY_MS);
+    delay(Timing::LOOP_DELAY_MS);
   }
-  joyCenterX = (int)(sx / JOY_CALIBRATION_SAMPLES);
-  joyCenterY = (int)(sy / JOY_CALIBRATION_SAMPLES);
+  input.centerX = (int)(sx / Input::CALIBRATION_SAMPLES);
+  input.centerY = (int)(sy / Input::CALIBRATION_SAMPLES);
 }
 
 // -------------------- NORMALIZED INPUT --------------------
@@ -38,26 +40,26 @@ void readNormalizedJoystick(float &nx, float &ny, int &rawDx, int &rawDy) {
   int rawY = readJoyY();
 
   // Update observed extremes for Y (helps asymmetry)
-  if (rawY < joyMinY) joyMinY = rawY;
-  if (rawY > joyMaxY) joyMaxY = rawY;
+  if (rawY < input.minY) input.minY = rawY;
+  if (rawY > input.maxY) input.maxY = rawY;
 
   // Deadzone
-  rawDx = applyDeadzone(rawX, joyCenterX, JOY_DEADZONE);
-  rawDy = applyDeadzone(rawY, joyCenterY, JOY_DEADZONE);
+  rawDx = applyDeadzone(rawX, input.centerX, Input::JOY_DEADZONE);
+  rawDy = applyDeadzone(rawY, input.centerY, Input::JOY_DEADZONE);
 
   // Normalize X
-  nx = -(float)clampi(rawDx, -JOY_RANGE, JOY_RANGE) / (float)JOY_RANGE;
+  nx = -(float)clampi(rawDx, -Input::JOY_RANGE, Input::JOY_RANGE) / (float)Input::JOY_RANGE;
 
   // Normalize Y with auto-cal asymmetry
-  int upSpan   = joyCenterY - joyMinY;
-  int downSpan = joyMaxY - joyCenterY;
+  int upSpan   = input.centerY - input.minY;
+  int downSpan = input.maxY - input.centerY;
   if (upSpan < 1) upSpan = 1;
   if (downSpan < 1) downSpan = 1;
 
   float nyRaw;
   if (rawDy >= 0) {
     nyRaw = (float)rawDy / (float)downSpan;
-    nyRaw *= JOY_DOWN_BOOST;
+    nyRaw *= Input::JOY_DOWN_BOOST;
   } else {
     nyRaw = (float)rawDy / (float)upSpan;
   }
@@ -78,11 +80,11 @@ void readNormalizedJoystick(float &nx, float &ny, int &rawDx, int &rawDy) {
 
 bool readButtonEdge() {
   bool b = joyPressedRaw();
-  bool edge = (b && !btnPrev);
-  btnPrev = b;
+  bool edge = (b && !input.btnPrev);
+  input.btnPrev = b;
   return edge;
 }
 
 void resetButtonState() {
-  btnPrev = false;
+  input.btnPrev = false;
 }

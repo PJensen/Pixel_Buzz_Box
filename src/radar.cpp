@@ -5,35 +5,36 @@
 extern BuzzSynth buzzer;
 
 // -------------------- RADAR STATE --------------------
-bool radarActive = false;
-uint32_t radarUntilMs = 0;
-int32_t radarTargetWX = 0;
-int32_t radarTargetWY = 0;
-bool radarToHive = false;
-bool radarFullActive = false;  // Persistent radar when carrying max pollen
+RadarState radar = {
+  .active = false,
+  .untilMs = 0,
+  .targetWX = 0, .targetWY = 0,
+  .toHive = false,
+  .fullActive = false
+};
 
 // -------------------- RADAR PING --------------------
 void beginRadarPing(uint32_t nowMs) {
-  radarActive = true;
-  radarUntilMs = nowMs + RADAR_DURATION_MS;
+  radar.active = true;
+  radar.untilMs = nowMs + Timing::RADAR_DURATION_MS;
 
-  if (pollenCount > 0) {
+  if (survival.pollenCount > 0) {
     // Point to hive when carrying pollen
-    radarToHive = true;
-    radarTargetWX = 0;
-    radarTargetWY = 0;
+    radar.toHive = true;
+    radar.targetWX = 0;
+    radar.targetWY = 0;
   } else {
     // Point to nearest flower when empty
-    radarToHive = false;
+    radar.toHive = false;
     int32_t fx, fy;
     if (findNearestFlower(fx, fy)) {
-      radarTargetWX = fx;
-      radarTargetWY = fy;
+      radar.targetWX = fx;
+      radar.targetWY = fy;
     } else {
       // No flowers, point to hive
-      radarTargetWX = 0;
-      radarTargetWY = 0;
-      radarToHive = true;
+      radar.targetWX = 0;
+      radar.targetWY = 0;
+      radar.toHive = true;
     }
   }
 
@@ -42,31 +43,31 @@ void beginRadarPing(uint32_t nowMs) {
 
 // -------------------- RADAR UPDATE --------------------
 void updateRadar(uint32_t nowMs) {
-  if (!radarActive) return;
-  if ((int32_t)(nowMs - radarUntilMs) >= 0) {
-    radarActive = false;
+  if (!radar.active) return;
+  if ((int32_t)(nowMs - radar.untilMs) >= 0) {
+    radar.active = false;
   }
 }
 
 // -------------------- FULL RADAR (AUTO) --------------------
 void updateFullRadar() {
   // Activate persistent radar when at max pollen capacity
-  if (pollenCount >= MAX_POLLEN_CARRY) {
-    radarFullActive = true;
-    radarTargetWX = 0;  // Hive is at origin
-    radarTargetWY = 0;
-    radarToHive = true;
+  if (survival.pollenCount >= Pool::MAX_POLLEN_CARRY) {
+    radar.fullActive = true;
+    radar.targetWX = 0;  // Hive is at origin
+    radar.targetWY = 0;
+    radar.toHive = true;
   } else {
-    radarFullActive = false;
+    radar.fullActive = false;
   }
 }
 
 // -------------------- RESET --------------------
 void resetRadar() {
-  radarActive = false;
-  radarUntilMs = 0;
-  radarTargetWX = 0;
-  radarTargetWY = 0;
-  radarToHive = false;
-  radarFullActive = false;
+  radar.active = false;
+  radar.untilMs = 0;
+  radar.targetWX = 0;
+  radar.targetWY = 0;
+  radar.toHive = false;
+  radar.fullActive = false;
 }

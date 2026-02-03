@@ -6,14 +6,13 @@
 extern BuzzSynth buzzer;
 
 // -------------------- FLOWER STATE --------------------
-Flower flowers[FLOWER_N];
-uint32_t flowerBornMs[FLOWER_N];
+Flower flowers[Pool::FLOWER_N];
+uint32_t flowerBornMs[Pool::FLOWER_N];
 
 // -------------------- STYLING --------------------
 void initFlowerStyle(Flower &f) {
   struct RGB { uint8_t r, g, b; };
 
-  // Rare flowers have special gold/shimmer colors for visual distinction
   if (f.type == FLOWER_RARE) {
     static const RGB rarePetals[] = {
       {255, 215, 100},  // Gold
@@ -31,7 +30,6 @@ void initFlowerStyle(Flower &f) {
 
     f.center = rgb565(255, 100, 50);  // Bright orange-red center
   } else {
-    // Normal flowers use standard color palette
     static const RGB petals[] = {
       {255, 120, 180},
       {170, 120, 255},
@@ -56,11 +54,10 @@ void initFlowerStyle(Flower &f) {
 void spawnFlowerAt(int i, int32_t wx, int32_t wy, FlowerType type) {
   Flower &f = flowers[i];
   f.alive = 1;
-  // Rare flowers are larger for better visual distinction
   if (type == FLOWER_RARE) {
-    f.r = (uint8_t)irand(RARE_FLOWER_RADIUS_MIN, RARE_FLOWER_RADIUS_MAX);
+    f.r = (uint8_t)irand(FlowerCfg::RARE_RADIUS_MIN, FlowerCfg::RARE_RADIUS_MAX);
   } else {
-    f.r = (uint8_t)irand(FLOWER_RADIUS_MIN, FLOWER_RADIUS_MAX);
+    f.r = (uint8_t)irand(FlowerCfg::RADIUS_MIN, FlowerCfg::RADIUS_MAX);
   }
   f.wx = wx;
   f.wy = wy;
@@ -70,10 +67,10 @@ void spawnFlowerAt(int i, int32_t wx, int32_t wy, FlowerType type) {
 }
 
 void spawnFlowerNearOrigin(int i) {
-  for (int tries = 0; tries < 60; tries++) {
-    int32_t r = (int32_t)irand(FLOWER_SPAWN_NEAR_DIST_MIN, FLOWER_SPAWN_NEAR_DIST_MAX);
+  for (int tries = 0; tries < FlowerCfg::SPAWN_NEAR_TRIES; tries++) {
+    int32_t r = (int32_t)irand(FlowerCfg::SPAWN_NEAR_DIST_MIN, FlowerCfg::SPAWN_NEAR_DIST_MAX);
     int32_t a = (int32_t)irand(0, 359);
-    float ang = (float)a * 0.0174532925f;
+    float ang = (float)a * MathConst::DEG2RAD;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
     int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
@@ -81,7 +78,7 @@ void spawnFlowerNearOrigin(int i) {
     for (int k = 0; k < i; k++) {
       int32_t dx = wx - flowers[k].wx;
       int32_t dy = wy - flowers[k].wy;
-      if ((dx*dx + dy*dy) < (FLOWER_COLLISION_DIST*FLOWER_COLLISION_DIST)) { ok = false; break; }
+      if ((dx*dx + dy*dy) < (FlowerCfg::COLLISION_DIST*FlowerCfg::COLLISION_DIST)) { ok = false; break; }
     }
     if (!ok) continue;
 
@@ -89,41 +86,39 @@ void spawnFlowerNearOrigin(int i) {
     return;
   }
   // fallback
-  int32_t r = (int32_t)irand(100, 180);
+  int32_t r = (int32_t)irand(FlowerCfg::FALLBACK_NEAR_MIN, FlowerCfg::FALLBACK_NEAR_MAX);
   int32_t a = (int32_t)irand(0, 359);
-  float ang = (float)a * 0.0174532925f;
+  float ang = (float)a * MathConst::DEG2RAD;
   spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r));
 }
 
 void spawnFlowerElsewhere(int i) {
-  // Determine if this should be a rare flower (risk/reward mechanic)
-  bool isRare = (irand(0, 99) < RARE_FLOWER_SPAWN_CHANCE);
+  bool isRare = (irand(0, 99) < FlowerCfg::RARE_SPAWN_CHANCE);
   FlowerType type = isRare ? FLOWER_RARE : FLOWER_NORMAL;
 
-  // Rare flowers spawn farther out in riskier zones
-  int32_t distMin = isRare ? RARE_FLOWER_DIST_MIN : FLOWER_SPAWN_ELSEWHERE_DIST_MIN;
-  int32_t distMax = isRare ? RARE_FLOWER_DIST_MAX : ((int)BOUNDARY_COMFORTABLE - FLOWER_SPAWN_ELSEWHERE_MARGIN);
+  int32_t distMin = isRare ? FlowerCfg::RARE_DIST_MIN : FlowerCfg::SPAWN_ELSEWHERE_DIST_MIN;
+  int32_t distMax = isRare ? FlowerCfg::RARE_DIST_MAX : ((int)World::BOUNDARY_COMFORTABLE - FlowerCfg::SPAWN_ELSEWHERE_MARGIN);
 
-  for (int tries = 0; tries < 80; tries++) {
+  for (int tries = 0; tries < FlowerCfg::SPAWN_ELSEWHERE_TRIES; tries++) {
     int32_t r = (int32_t)irand(distMin, distMax);
     int32_t a = (int32_t)irand(0, 359);
-    float ang = (float)a * 0.0174532925f;
+    float ang = (float)a * MathConst::DEG2RAD;
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
     int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
-    if ((wx*wx + wy*wy) > (int32_t)(BOUNDARY_COMFORTABLE * BOUNDARY_COMFORTABLE)) continue;
+    if ((wx*wx + wy*wy) > (int32_t)(World::BOUNDARY_COMFORTABLE * World::BOUNDARY_COMFORTABLE)) continue;
 
-    int32_t dx_bee = wx - (int32_t)beeWX;
-    int32_t dy_bee = wy - (int32_t)beeWY;
-    if ((dx_bee*dx_bee + dy_bee*dy_bee) < (FLOWER_BEE_AVOIDANCE_DIST*FLOWER_BEE_AVOIDANCE_DIST)) continue;
+    int32_t dx_bee = wx - (int32_t)bee.wx;
+    int32_t dy_bee = wy - (int32_t)bee.wy;
+    if ((dx_bee*dx_bee + dy_bee*dy_bee) < (FlowerCfg::BEE_AVOIDANCE_DIST*FlowerCfg::BEE_AVOIDANCE_DIST)) continue;
 
     bool ok = true;
-    for (int k = 0; k < FLOWER_N; k++) {
+    for (int k = 0; k < Pool::FLOWER_N; k++) {
       if (k == i) continue;
       if (!flowers[k].alive) continue;
       int32_t dx = wx - flowers[k].wx;
       int32_t dy = wy - flowers[k].wy;
-      if ((dx*dx + dy*dy) < (FLOWER_SPACING_ELSEWHERE*FLOWER_SPACING_ELSEWHERE)) { ok = false; break; }
+      if ((dx*dx + dy*dy) < (FlowerCfg::SPACING_ELSEWHERE*FlowerCfg::SPACING_ELSEWHERE)) { ok = false; break; }
     }
     if (!ok) continue;
 
@@ -131,14 +126,14 @@ void spawnFlowerElsewhere(int i) {
     return;
   }
   // fallback
-  int32_t r = (int32_t)irand(80, 200);
+  int32_t r = (int32_t)irand(FlowerCfg::FALLBACK_ELSEWHERE_MIN, FlowerCfg::FALLBACK_ELSEWHERE_MAX);
   int32_t a = (int32_t)irand(0, 359);
-  float ang = (float)a * 0.0174532925f;
+  float ang = (float)a * MathConst::DEG2RAD;
   spawnFlowerAt(i, (int32_t)(cosf(ang) * (float)r), (int32_t)(sinf(ang) * (float)r), type);
 }
 
 void initFlowers() {
-  for (int i = 0; i < FLOWER_N; i++) {
+  for (int i = 0; i < Pool::FLOWER_N; i++) {
     flowers[i].alive = 0;
     spawnFlowerNearOrigin(i);
   }
@@ -146,54 +141,48 @@ void initFlowers() {
 
 // -------------------- COLLECTION --------------------
 bool tryCollectPollen(uint32_t nowMs) {
-  if (pollenCount >= MAX_POLLEN_CARRY) return false;
-  if (isUnloading) return false;
+  if (survival.pollenCount >= Pool::MAX_POLLEN_CARRY) return false;
+  if (hive.isUnloading) return false;
 
-  int32_t bx = (int32_t)beeWX;
-  int32_t by = (int32_t)beeWY;
+  int32_t bx = (int32_t)bee.wx;
+  int32_t by = (int32_t)bee.wy;
 
-  for (int i = 0; i < FLOWER_N; i++) {
+  for (int i = 0; i < Pool::FLOWER_N; i++) {
     Flower &f = flowers[i];
     if (!f.alive) continue;
 
     int32_t dx = bx - f.wx;
     int32_t dy = by - f.wy;
-    int32_t hitR = (int32_t)f.r + BEE_HIT_RADIUS;
+    int32_t hitR = (int32_t)f.r + FlowerCfg::BEE_HIT_RADIUS;
 
-    // Active magnet increases collection radius (easier to catch pulled flowers)
     if (isMagnetActive(nowMs)) {
       hitR *= 2;
     }
 
     if ((dx*dx + dy*dy) <= hitR*hitR) {
-      // Rare flowers grant bonus pollen (risk/reward)
       bool isRare = (f.type == FLOWER_RARE);
-      uint8_t pollenGain = isRare ? (1 + RARE_FLOWER_POLLEN_BONUS) : 1;
-      pollenCount += pollenGain;
-      if (pollenCount > MAX_POLLEN_CARRY) pollenCount = MAX_POLLEN_CARRY;
+      uint8_t pollenGain = isRare ? (1 + FlowerCfg::RARE_POLLEN_BONUS) : 1;
+      survival.pollenCount += pollenGain;
+      if (survival.pollenCount > Pool::MAX_POLLEN_CARRY) survival.pollenCount = Pool::MAX_POLLEN_CARRY;
 
-      // Spawn gold particle burst for rare flowers
       if (isRare) {
-        for (int p = 0; p < 6; p++) {
-          float angle = (float)p * 1.047f;  // 60 degrees apart
-          float ox = cosf(angle) * 8.0f;
-          float oy = sinf(angle) * 8.0f;
-          spawnTrailParticle((float)f.wx + ox, (float)f.wy + oy, 0.8f, nowMs, 3);  // variant 3 = gold
+        for (int p = 0; p < FlowerCfg::RARE_PARTICLE_COUNT; p++) {
+          float angle = (float)p * FlowerCfg::RARE_PARTICLE_ANGLE_STEP;
+          float ox = cosf(angle) * FlowerCfg::PARTICLE_OFFSET;
+          float oy = sinf(angle) * FlowerCfg::PARTICLE_OFFSET;
+          spawnTrailParticle((float)f.wx + ox, (float)f.wy + oy, 0.8f, nowMs, Vfx::VARIANT_GOLD);
         }
       }
 
       f.alive = 0;
       spawnFlowerElsewhere(i);
 
-      // Auto-boost on flower pickup
       triggerAutoBoost(nowMs);
 
-      // Rare flowers have enhanced feedback
       if (isRare) {
-        triggerCameraShake(nowMs, 8.5f, 220);  // Stronger shake than normal
+        triggerCameraShake(nowMs, FlowerCfg::RARE_SHAKE_MAGNITUDE, FlowerCfg::RARE_SHAKE_DURATION);
       }
 
-      // Rare flowers play special powerup sound
       if (!buzzer.soundBusy()) {
         buzzer.startSound(isRare ? SND_POWERUP : SND_POLLEN_CHIRP, nowMs);
       }
@@ -207,50 +196,42 @@ bool tryCollectPollen(uint32_t nowMs) {
 void updateFlowerPhysics(float dt, uint32_t nowMs) {
   if (!isMagnetActive(nowMs)) return;
 
-  static uint32_t lastParticleMs[FLOWER_N] = {0};
+  static uint32_t lastParticleMs[Pool::FLOWER_N] = {0};
 
-  for (int i = 0; i < FLOWER_N; i++) {
+  for (int i = 0; i < Pool::FLOWER_N; i++) {
     Flower &f = flowers[i];
     if (!f.alive) continue;
 
-    // Calculate distance to bee
-    int32_t dx = (int32_t)beeWX - f.wx;
-    int32_t dy = (int32_t)beeWY - f.wy;
+    int32_t dx = (int32_t)bee.wx - f.wx;
+    int32_t dy = (int32_t)bee.wy - f.wy;
     int32_t distSq = dx*dx + dy*dy;
 
-    // Only pull within radius
-    if (distSq > (MAGNET_PULL_RADIUS * MAGNET_PULL_RADIUS)) continue;
+    if (distSq > (Magnet::PULL_RADIUS * Magnet::PULL_RADIUS)) continue;
 
     float dist = sqrtf((float)distSq);
-    if (dist < 1.0f) continue;  // Avoid division by zero
+    if (dist < 1.0f) continue;
 
-    // Normalize direction
     float ux = (float)dx / dist;
     float uy = (float)dy / dist;
 
-    // Calculate pull force (stronger when closer, scaled by magnetStrength)
-    float falloff = 1.0f - (dist / (float)MAGNET_PULL_RADIUS);
-    float force = MAGNET_SPRING_K * falloff * magnetStrength;
+    float falloff = 1.0f - (dist / (float)Magnet::PULL_RADIUS);
+    float force = Magnet::SPRING_K * falloff * hive.magnet.strength;
 
-    // Apply force to flower position
-    float moveX = ux * force * dt * 60.0f;  // Scale for frame-rate independence
-    float moveY = uy * force * dt * 60.0f;
+    float moveX = ux * force * dt * 60.0f * Magnet::CINEMATIC_PULL_SPEED;
+    float moveY = uy * force * dt * 60.0f * Magnet::CINEMATIC_PULL_SPEED;
 
     f.wx += (int32_t)moveX;
     f.wy += (int32_t)moveY;
 
-    // Spawn particle trail during pull (visual feedback) - more frequent for better animation
-    if ((nowMs - lastParticleMs[i]) > 60) {  // Faster particle spawn (was 100ms, now 60ms)
-      float particleStrength = clampf(force / MAGNET_SPRING_K, 0.4f, 1.0f);
+    if ((nowMs - lastParticleMs[i]) > FlowerCfg::MAGNET_PARTICLE_INTERVAL) {
+      float particleStrength = clampf(force / Magnet::SPRING_K, 0.4f, 1.0f);
 
-      // Spawn particle at flower position showing direction of pull
-      spawnTrailParticle((float)f.wx, (float)f.wy, particleStrength, nowMs, 4); // variant 4 = cyan
+      spawnTrailParticle((float)f.wx, (float)f.wy, particleStrength, nowMs, Vfx::VARIANT_CYAN);
 
-      // Add second particle slightly behind for motion trail effect
-      if (dist > 30.0f) {
-        float trailX = (float)f.wx - (ux * 5.0f);
-        float trailY = (float)f.wy - (uy * 5.0f);
-        spawnTrailParticle(trailX, trailY, particleStrength * 0.7f, nowMs, 4);
+      if (dist > FlowerCfg::MAGNET_TRAIL_MIN_DIST) {
+        float trailX = (float)f.wx - (ux * FlowerCfg::MAGNET_TRAIL_OFFSET);
+        float trailY = (float)f.wy - (uy * FlowerCfg::MAGNET_TRAIL_OFFSET);
+        spawnTrailParticle(trailX, trailY, particleStrength * 0.7f, nowMs, Vfx::VARIANT_CYAN);
       }
 
       lastParticleMs[i] = nowMs;
@@ -263,10 +244,10 @@ bool findNearestFlower(int32_t &outWX, int32_t &outWY) {
   int best = -1;
   int64_t bestD2 = 0;
 
-  int32_t bx = (int32_t)beeWX;
-  int32_t by = (int32_t)beeWY;
+  int32_t bx = (int32_t)bee.wx;
+  int32_t by = (int32_t)bee.wy;
 
-  for (int i = 0; i < FLOWER_N; i++) {
+  for (int i = 0; i < Pool::FLOWER_N; i++) {
     if (!flowers[i].alive) continue;
     int32_t dx = flowers[i].wx - bx;
     int32_t dy = flowers[i].wy - by;

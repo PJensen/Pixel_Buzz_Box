@@ -13,6 +13,8 @@ enum SndMode : uint8_t {
   SND_POLLEN_CHIRP,
   SND_POWERUP,
   SND_MAGNET_ACTIVATE,
+  SND_WASP_HIT,
+  SND_WASP_KILL,
 };
 
 // Sound state structure
