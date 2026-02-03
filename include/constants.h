@@ -208,6 +208,7 @@ namespace Input {
   constexpr int CALIBRATION_SAMPLES = 40;
   constexpr int CALIBRATION_DELAY_MS = 30;
   constexpr float JOY_DOWN_BOOST = 1.20f;
+  constexpr uint32_t TRIPLE_CLICK_WINDOW_MS = 500;  // Max time between 3 clicks
 }
 
 // ============================================================================

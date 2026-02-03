@@ -77,11 +77,11 @@ void initHighScores() {
 bool isHighScore(uint16_t score) {
   if (score == 0) return false;
 
-  // If table not full, any score qualifies
-  if (highScoreTable.count < HighScore::MAX_ENTRIES) return true;
+  // If table is empty, any score qualifies
+  if (highScoreTable.count == 0) return true;
 
-  // Check if score beats the lowest entry
-  return score > highScoreTable.entries[HighScore::MAX_ENTRIES - 1].score;
+  // Must beat the lowest existing score to qualify
+  return score > highScoreTable.entries[highScoreTable.count - 1].score;
 }
 
 int8_t getHighScoreRank(uint16_t score) {

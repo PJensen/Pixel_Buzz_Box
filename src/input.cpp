@@ -88,3 +88,26 @@ bool readButtonEdge() {
 void resetButtonState() {
   input.btnPrev = false;
 }
+
+// -------------------- TRIPLE-CLICK DETECTION --------------------
+static uint32_t clickTimestamps[3] = {0, 0, 0};
+static uint8_t clickIndex = 0;
+
+bool checkTripleClick(uint32_t nowMs) {
+  // Record this click
+  clickTimestamps[clickIndex] = nowMs;
+  clickIndex = (clickIndex + 1) % 3;
+
+  // Check if all 3 clicks are within the window
+  uint32_t oldest = clickTimestamps[clickIndex];  // Next slot is the oldest
+  if (oldest == 0) return false;  // Not enough clicks yet
+
+  return (nowMs - oldest) <= Input::TRIPLE_CLICK_WINDOW_MS;
+}
+
+void resetTripleClickState() {
+  clickTimestamps[0] = 0;
+  clickTimestamps[1] = 0;
+  clickTimestamps[2] = 0;
+  clickIndex = 0;
+}

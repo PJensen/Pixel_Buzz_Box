@@ -196,6 +196,19 @@ void loop() {
     resetButtonState();
   }
 
+  // Triple-click detection for sound toggle (works anytime, including game over)
+  if (edgeDown) {
+    if (checkTripleClick(now)) {
+      bool enabling = !buzzer.isEnabled();
+      buzzer.setEnabled(enabling);
+      if (enabling) {
+        buzzer.startSound(SND_CLICK, now);  // Confirmation beep
+      }
+      resetTripleClickState();
+      edgeDown = false;  // Consume the click
+    }
+  }
+
   // High score entry input (during game over)
   if (survival.isGameOver && isHighScoreEntryActive()) {
     float nx, ny;

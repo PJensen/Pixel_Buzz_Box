@@ -21,6 +21,8 @@ void calibrateJoystick();
 void readNormalizedJoystick(float &nx, float &ny, int &rawDx, int &rawDy);
 bool readButtonEdge();
 void resetButtonState();
+bool checkTripleClick(uint32_t nowMs);
+void resetTripleClickState();
 
 // ==================== BEE (bee.cpp) ====================
 extern BeeState bee;
