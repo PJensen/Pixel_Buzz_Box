@@ -26,6 +26,13 @@ static bool isNightTime(float dayPhase) {
   return dayPhase < DayNight::DAWN_START || dayPhase >= DayNight::DUSK_END;
 }
 
+// -------------------- WORLD BOUNDARY (grows each day) --------------------
+float getWorldBoundary() {
+  // Day 1 = base, each subsequent day adds BOUNDARY_GROWTH
+  float boundary = World::BOUNDARY_BASE + (survival.currentDay - 1) * World::BOUNDARY_GROWTH;
+  return (boundary < World::BOUNDARY_MAX) ? boundary : World::BOUNDARY_MAX;
+}
+
 static bool isBeeAtHive() {
   int32_t bx = (int32_t)bee.wx;
   int32_t by = (int32_t)bee.wy;

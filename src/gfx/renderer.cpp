@@ -17,12 +17,12 @@ void renderFrame(uint32_t nowMs) {
       // Ground fill (below sky zone)
       gfx_drawGroundFill(canvas, tileX, tileY, ox, oy);
 
-      // Cloud layers (parallax, behind game objects)
+      // Grass layer (ground detail, behind clouds)
+      gfx_drawGrassLayer(canvas, tileX, tileY, ox, oy, nowMs);
+
+      // Cloud layers (parallax, floating above ground)
       gfx_drawCloudLayer(canvas, tileX, tileY, ox, oy, 0.15f, 96,  0xC10D1u, nowMs);
       gfx_drawCloudLayer(canvas, tileX, tileY, ox, oy, 0.35f, 72,  0xC10D2u, nowMs);
-
-      // Grass layer (ground detail)
-      gfx_drawGrassLayer(canvas, tileX, tileY, ox, oy, nowMs);
 
       // Floating pollen/seeds
       gfx_drawPollenLayer(canvas, tileX, tileY, ox, oy, nowMs);

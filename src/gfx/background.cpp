@@ -188,12 +188,13 @@ void gfx_drawBoundaryZone(Adafruit_GFX &g, int ox, int oy) {
   int hiveY = beeScreenCY() + oy;
 
   float distFromCenter = sqrtf(bee.wx * bee.wx + bee.wy * bee.wy);
+  float worldBoundary = getWorldBoundary();
 
-  if (distFromCenter > World::BOUNDARY_COMFORTABLE * 0.6f) {
+  if (distFromCenter > worldBoundary * 0.6f) {
     // Natural boundary - hedge/brush color instead of tech circle
     bool night = isNightTime(survival.dayPhase);
     uint16_t boundaryColor = night ? rgb565(30, 50, 35) : rgb565(60, 100, 50);
-    g.drawCircle(hiveX, hiveY, (int)(World::BOUNDARY_COMFORTABLE * camera.zoom), boundaryColor);
+    g.drawCircle(hiveX, hiveY, (int)(worldBoundary * camera.zoom), boundaryColor);
   }
 }
 
@@ -241,8 +242,8 @@ void gfx_drawGrassLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, u
       int32_t wx = cx * GRASS_CELL + px;
       int32_t wy = cy * GRASS_CELL + py;
 
-      int sx = beeScreenCX() + (int)(((float)wx - camX) * camera.zoom);
-      int sy = beeScreenCY() + (int)(((float)wy - camY) * camera.zoom);
+      int sx = beeScreenCX() + (int)(((float)wx - camX) * camera.zoom + camera.shakeX);
+      int sy = beeScreenCY() + (int)(((float)wy - camY) * camera.zoom + camera.shakeY);
 
       // Skip if in sky zone
       if (sy < Display::HUD_H) continue;
@@ -311,12 +312,12 @@ void gfx_drawCloudLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
       int32_t wx = cx * cell + (int)(h & 0xFFu) % cell;
       int32_t wy = cy * cell + (int)((h >> 8) & 0xFFu) % cell;
 
-      int sx = beeSX + (int)(((float)wx - camX) * camera.zoom);
-      int sy = beeSY + (int)(((float)wy - camY) * camera.zoom);
+      int sx = beeSX + (int)(((float)wx - camX) * camera.zoom + camera.shakeX);
+      int sy = beeSY + (int)(((float)wy - camY) * camera.zoom + camera.shakeY);
 
-      // Skip if outside tile with margin for cloud size
-      if (sx < tileX - 40 || sx > tileX + Display::CANVAS_W + 40 ||
-          sy < tileY - 25 || sy > tileY + Display::CANVAS_H + 25) continue;
+      // Skip if outside tile with margin for cloud size (clouds can be up to 49px wide with offsets)
+      if (sx < tileX - 60 || sx > tileX + Display::CANVAS_W + 60 ||
+          sy < tileY - 35 || sy > tileY + Display::CANVAS_H + 35) continue;
 
       int cloudW = 18 + (int)((h >> 16) & 0x1Fu);  // 18-49
       int cloudH = 10 + (int)((h >> 20) & 0xFu);   // 10-25
@@ -390,8 +391,8 @@ void gfx_drawPollenLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, 
       int32_t wx = cx * cell + px;
       int32_t wy = cy * cell + py;
 
-      int sx = beeScreenCX() + (int)(((float)wx - camX) * camera.zoom);
-      int sy = beeScreenCY() + (int)(((float)wy - camY) * camera.zoom);
+      int sx = beeScreenCX() + (int)(((float)wx - camX) * camera.zoom + camera.shakeX);
+      int sy = beeScreenCY() + (int)(((float)wy - camY) * camera.zoom + camera.shakeY);
 
       // Skip if in sky zone or outside tile
       if (sy < Display::HUD_H) continue;
@@ -437,6 +438,43 @@ void gfx_drawScreenAnchor(Adafruit_GFX &g, int ox, int oy, uint32_t nowMs) {
 }
 
 // -------------------- NIGHT WARNING OVERLAY --------------------
+// Helper: Draw a portion of a screen-space rectangle that falls within this tile
+static void drawScreenBorderInTile(Adafruit_GFX &g, int tileX, int tileY, int thickness, uint16_t color) {
+  // Screen edges in tile-local coordinates
+  int leftEdge = -tileX;
+  int rightEdge = Display::SCREEN_W - 1 - tileX;
+  int topEdge = -tileY;
+  int bottomEdge = Display::SCREEN_H - 1 - tileY;
+
+  // Draw only the portions of screen border that fall within this tile
+  for (int t = 0; t < thickness; t++) {
+    // Top edge
+    if (topEdge + t >= 0 && topEdge + t < Display::CANVAS_H) {
+      int x0 = (leftEdge + t < 0) ? 0 : leftEdge + t;
+      int x1 = (rightEdge - t >= Display::CANVAS_W) ? Display::CANVAS_W - 1 : rightEdge - t;
+      if (x0 <= x1) g.drawFastHLine(x0, topEdge + t, x1 - x0 + 1, color);
+    }
+    // Bottom edge
+    if (bottomEdge - t >= 0 && bottomEdge - t < Display::CANVAS_H) {
+      int x0 = (leftEdge + t < 0) ? 0 : leftEdge + t;
+      int x1 = (rightEdge - t >= Display::CANVAS_W) ? Display::CANVAS_W - 1 : rightEdge - t;
+      if (x0 <= x1) g.drawFastHLine(x0, bottomEdge - t, x1 - x0 + 1, color);
+    }
+    // Left edge
+    if (leftEdge + t >= 0 && leftEdge + t < Display::CANVAS_W) {
+      int y0 = (topEdge + t < 0) ? 0 : topEdge + t;
+      int y1 = (bottomEdge - t >= Display::CANVAS_H) ? Display::CANVAS_H - 1 : bottomEdge - t;
+      if (y0 <= y1) g.drawFastVLine(leftEdge + t, y0, y1 - y0 + 1, color);
+    }
+    // Right edge
+    if (rightEdge - t >= 0 && rightEdge - t < Display::CANVAS_W) {
+      int y0 = (topEdge + t < 0) ? 0 : topEdge + t;
+      int y1 = (bottomEdge - t >= Display::CANVAS_H) ? Display::CANVAS_H - 1 : bottomEdge - t;
+      if (y0 <= y1) g.drawFastVLine(rightEdge - t, y0, y1 - y0 + 1, color);
+    }
+  }
+}
+
 void gfx_drawNightWarning(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, uint32_t nowMs) {
   float dayPhase = survival.dayPhase;
 
@@ -447,11 +485,10 @@ void gfx_drawNightWarning(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
     float pulse = sinf((float)nowMs * 0.006f) * 0.5f + 0.5f;
     int alpha = (int)(urgency * pulse * 60.0f);
 
-    if (alpha > 5) {
+    if (alpha > 8) {
       uint16_t warnColor = rgb565(alpha, alpha / 3, 0);
-      // Draw warning border
-      g.drawRect(ox, oy, Display::CANVAS_W, Display::CANVAS_H, warnColor);
-      g.drawRect(ox + 1, oy + 1, Display::CANVAS_W - 2, Display::CANVAS_H - 2, warnColor);
+      // Draw warning border around full screen
+      drawScreenBorderInTile(g, tileX, tileY, 2, warnColor);
     }
   }
 
@@ -461,10 +498,8 @@ void gfx_drawNightWarning(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
     int alpha = (int)(40 + pulse * 30);
     uint16_t dangerColor = rgb565(alpha, 0, alpha / 2);
 
-    // Vignette effect
-    for (int i = 0; i < 3; i++) {
-      g.drawRect(ox + i, oy + i, Display::CANVAS_W - i * 2, Display::CANVAS_H - i * 2, dangerColor);
-    }
+    // Vignette effect around full screen
+    drawScreenBorderInTile(g, tileX, tileY, 3, dangerColor);
   }
 }
 

@@ -49,7 +49,7 @@ void updateBeePhysics(float nx, float ny, int rawDx, int rawDy, float dt, bool b
   if (isBeeStunned(nowMs)) return;
 
   // Joystick maps to target position in world space (bounded exploration area)
-  const float roamRadius = World::BOUNDARY_COMFORTABLE;
+  const float roamRadius = getWorldBoundary();
   float targetWX = nx * roamRadius;
   float targetWY = ny * roamRadius;
 

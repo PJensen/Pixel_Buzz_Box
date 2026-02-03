@@ -124,6 +124,9 @@ void updateDayTransition(uint32_t nowMs);
 bool isDayTransition();
 float getDayTransitionProgress(uint32_t nowMs);
 
+// World boundary (grows with each day)
+float getWorldBoundary();
+
 // ==================== WASP (wasp.cpp) ====================
 extern Wasp wasps[Pool::WASP_MAX];
 extern uint32_t beeInvulnUntilMs;

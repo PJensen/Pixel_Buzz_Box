@@ -22,8 +22,9 @@ CameraState camera = {
 uint32_t hivePulseUntilMs = 0;
 
 // -------------------- CAMERA FUNCTIONS --------------------
-int beeScreenCX() { return tft.width() / 2 + (int)camera.shakeX; }
-int beeScreenCY() { return (tft.height() + Display::HUD_H) / 2 + (int)camera.shakeY; }
+// Bee's screen position (center of screen, no shake - bee stays stable)
+int beeScreenCX() { return tft.width() / 2; }
+int beeScreenCY() { return (tft.height() + Display::HUD_H) / 2; }
 
 void triggerCameraShake(uint32_t nowMs, float magnitude, uint32_t durationMs) {
   camera.shakeUntilMs = nowMs + durationMs;
@@ -61,18 +62,19 @@ void resetCamera() {
 }
 
 // -------------------- COORDINATE TRANSFORMS --------------------
+// World to screen includes shake offset (world shakes around stable bee)
 void worldToScreen(int32_t wx, int32_t wy, int &sx, int &sy) {
   float dx = (float)wx - bee.wx;
   float dy = (float)wy - bee.wy;
-  sx = beeScreenCX() + (int)(dx * camera.zoom);
-  sy = beeScreenCY() + (int)(dy * camera.zoom);
+  sx = beeScreenCX() + (int)(dx * camera.zoom + camera.shakeX);
+  sy = beeScreenCY() + (int)(dy * camera.zoom + camera.shakeY);
 }
 
 void worldToScreenF(float wx, float wy, int &sx, int &sy) {
   float dx = wx - bee.wx;
   float dy = wy - bee.wy;
-  sx = beeScreenCX() + (int)(dx * camera.zoom);
-  sy = beeScreenCY() + (int)(dy * camera.zoom);
+  sx = beeScreenCX() + (int)(dx * camera.zoom + camera.shakeX);
+  sy = beeScreenCY() + (int)(dy * camera.zoom + camera.shakeY);
 }
 
 uint32_t worldCellSeed(int32_t cx, int32_t cy, uint32_t salt) {

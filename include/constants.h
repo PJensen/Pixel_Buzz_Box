@@ -109,7 +109,10 @@ namespace Bonus {
 // WORLD
 // ============================================================================
 namespace World {
-  constexpr float BOUNDARY_COMFORTABLE = 180.0f;
+  constexpr float BOUNDARY_BASE = 180.0f;       // Starting world radius (Day 1)
+  constexpr float BOUNDARY_GROWTH = 15.0f;      // Additional radius per day
+  constexpr float BOUNDARY_MAX = 300.0f;        // Maximum world radius
+  constexpr float BOUNDARY_COMFORTABLE = 180.0f; // Legacy: use getWorldBoundary()
 }
 
 // ============================================================================
@@ -137,9 +140,9 @@ namespace Physics {
 // CAMERA
 // ============================================================================
 namespace Camera {
-  constexpr float ZOOM_BOOST = 1.22f;
+  constexpr float ZOOM_BOOST = 1.18f;
   constexpr float ZOOM_NORMAL = 1.0f;
-  constexpr float ZOOM_LERP_SPEED = 7.0f;
+  constexpr float ZOOM_LERP_SPEED = 3.5f;
   constexpr float SHAKE_MAGNITUDE = 6.5f;
   constexpr uint32_t SHAKE_DURATION_MS = 180;
   constexpr float SHAKE_PHASE_MULT = 0.045f;

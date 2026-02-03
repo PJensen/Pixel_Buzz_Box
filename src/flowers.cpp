@@ -97,7 +97,8 @@ void spawnFlowerElsewhere(int i) {
   FlowerType type = isRare ? FLOWER_RARE : FLOWER_NORMAL;
 
   int32_t distMin = isRare ? FlowerCfg::RARE_DIST_MIN : FlowerCfg::SPAWN_ELSEWHERE_DIST_MIN;
-  int32_t distMax = isRare ? FlowerCfg::RARE_DIST_MAX : ((int)World::BOUNDARY_COMFORTABLE - FlowerCfg::SPAWN_ELSEWHERE_MARGIN);
+  float worldBoundary = getWorldBoundary();
+  int32_t distMax = isRare ? FlowerCfg::RARE_DIST_MAX : ((int)worldBoundary - FlowerCfg::SPAWN_ELSEWHERE_MARGIN);
 
   for (int tries = 0; tries < FlowerCfg::SPAWN_ELSEWHERE_TRIES; tries++) {
     int32_t r = (int32_t)irand(distMin, distMax);
@@ -106,7 +107,7 @@ void spawnFlowerElsewhere(int i) {
     int32_t wx = (int32_t)(cosf(ang) * (float)r);
     int32_t wy = (int32_t)(sinf(ang) * (float)r);
 
-    if ((wx*wx + wy*wy) > (int32_t)(World::BOUNDARY_COMFORTABLE * World::BOUNDARY_COMFORTABLE)) continue;
+    if ((wx*wx + wy*wy) > (int32_t)(worldBoundary * worldBoundary)) continue;
 
     int32_t dx_bee = wx - (int32_t)bee.wx;
     int32_t dy_bee = wy - (int32_t)bee.wy;
