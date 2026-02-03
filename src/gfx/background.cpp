@@ -275,22 +275,20 @@ void gfx_drawGrassLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy, u
   }
 }
 
-// -------------------- CLOUD LAYER (replaces stars) --------------------
+// -------------------- CLOUD LAYER --------------------
 void gfx_drawCloudLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
                         float parallax, int cell, uint32_t salt, uint32_t nowMs) {
-  float driftX = (float)nowMs * 0.008f * parallax;  // Clouds drift slowly
+  float driftX = (float)nowMs * 0.008f * parallax;
   float camX = bee.wx * parallax + driftX;
   float camY = bee.wy * parallax;
 
-  int sx0 = tileX;
-  int sy0 = tileY;
-  int sx1 = tileX + Display::CANVAS_W - 1;
-  int sy1 = tileY + Display::CANVAS_H - 1;
+  int beeSX = beeScreenCX();
+  int beeSY = beeScreenCY();
 
-  int32_t wx0 = (int32_t)(camX + (float)(sx0 - beeScreenCX()) / camera.zoom);
-  int32_t wy0 = (int32_t)(camY + (float)(sy0 - beeScreenCY()) / camera.zoom);
-  int32_t wx1 = (int32_t)(camX + (float)(sx1 - beeScreenCX()) / camera.zoom);
-  int32_t wy1 = (int32_t)(camY + (float)(sy1 - beeScreenCY()) / camera.zoom);
+  int32_t wx0 = (int32_t)(camX + (float)(tileX - beeSX) / camera.zoom);
+  int32_t wy0 = (int32_t)(camY + (float)(tileY - beeSY) / camera.zoom);
+  int32_t wx1 = (int32_t)(camX + (float)(tileX + Display::CANVAS_W - 1 - beeSX) / camera.zoom);
+  int32_t wy1 = (int32_t)(camY + (float)(tileY + Display::CANVAS_H - 1 - beeSY) / camera.zoom);
 
   int32_t cx0 = (int32_t)floorf((float)wx0 / (float)cell);
   int32_t cy0 = (int32_t)floorf((float)wy0 / (float)cell);
@@ -298,64 +296,55 @@ void gfx_drawCloudLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
   int32_t cy1 = (int32_t)floorf((float)wy1 / (float)cell);
 
   bool night = isNightTime(survival.dayPhase);
-  uint16_t cloudMain = night ? Color::CLOUD_NIGHT : Color::CLOUD_WHITE;
-  uint16_t cloudShadow = night ? rgb565(40, 50, 70) : Color::CLOUD_GRAY;
+  uint16_t baseMain = night ? Color::CLOUD_NIGHT : Color::CLOUD_WHITE;
+  uint16_t baseShadow = night ? rgb565(40, 50, 70) : Color::CLOUD_GRAY;
+
+  // Base RGB values for fade calculations
+  uint8_t mainR = night ? 60 : 245, mainG = night ? 70 : 248, mainB = night ? 90 : 255;
+  uint8_t shadR = night ? 40 : 200, shadG = night ? 50 : 210, shadB = night ? 70 : 225;
 
   for (int32_t cy = cy0; cy <= cy1; cy++) {
     for (int32_t cx = cx0; cx <= cx1; cx++) {
       uint32_t h = worldCellSeed(cx, cy, salt);
+      if ((h & 0xFu) > 2u) continue;  // Sparse: ~3/16 cells have clouds
 
-      // Only 1 in 8 cells have clouds (sparse)
-      if ((h & 0xFu) > 2u) continue;
+      int32_t wx = cx * cell + (int)(h & 0xFFu) % cell;
+      int32_t wy = cy * cell + (int)((h >> 8) & 0xFFu) % cell;
 
-      int px = (int)(h & 0xFFu) % cell;
-      int py = (int)((h >> 8) & 0xFFu) % cell;
+      int sx = beeSX + (int)(((float)wx - camX) * camera.zoom);
+      int sy = beeSY + (int)(((float)wy - camY) * camera.zoom);
 
-      int32_t wx = cx * cell + px;
-      int32_t wy = cy * cell + py;
+      // Skip if outside tile with margin for cloud size
+      if (sx < tileX - 40 || sx > tileX + Display::CANVAS_W + 40 ||
+          sy < tileY - 25 || sy > tileY + Display::CANVAS_H + 25) continue;
 
-      int sx = beeScreenCX() + (int)(((float)wx - camX) * camera.zoom);
-      int sy = beeScreenCY() + (int)(((float)wy - camY) * camera.zoom);
+      int cloudW = 18 + (int)((h >> 16) & 0x1Fu);  // 18-49
+      int cloudH = 10 + (int)((h >> 20) & 0xFu);   // 10-25
 
-      // Skip if outside tile (with larger margin for bigger clouds)
-      if (sx < sx0 - 40 || sx > sx1 + 40 || sy < sy0 - 25 || sy > sy1 + 25) continue;
+      // Fade cloud when bee flies through it
+      uint16_t cloudMain = baseMain;
+      uint16_t cloudShadow = baseShadow;
 
-      // Cloud size varies - bigger clouds!
-      int cloudW = 18 + (int)((h >> 16) & 0x1Fu);  // 18-49 wide
-      int cloudH = 10 + (int)((h >> 20) & 0xFu);   // 10-25 tall
-
-      // Check distance from bee - clouds become transparent when bee flies through
-      int beeSX = beeScreenCX();
-      int beeSY = beeScreenCY();
-      int dx = sx - beeSX;
-      int dy = sy - beeSY;
-      float dist = sqrtf((float)(dx*dx + dy*dy));
+      int dx = sx - beeSX, dy = sy - beeSY;
+      float distSq = (float)(dx * dx + dy * dy);
       float fadeRadius = (float)(cloudW + cloudH);
+      float fadeRadiusSq = fadeRadius * fadeRadius;
 
-      // If bee is inside cloud, make it mostly transparent
-      if (dist < fadeRadius) {
-        float fade = dist / fadeRadius;  // 0 = center, 1 = edge
-        if (fade < 0.3f) continue;  // Skip drawing - "burst" through center
-        // Reduce opacity by blending toward transparent for nearby clouds
-        uint8_t mainR = night ? 60 : 245;
-        uint8_t mainG = night ? 70 : 248;
-        uint8_t mainB = night ? 90 : 255;
-        uint8_t shadowR = night ? 40 : 200;
-        uint8_t shadowG = night ? 50 : 210;
-        uint8_t shadowB = night ? 70 : 225;
-        // Fade the colors toward transparent (darker)
-        float opacity = fade;
-        cloudMain = rgb565((uint8_t)(mainR * opacity), (uint8_t)(mainG * opacity), (uint8_t)(mainB * opacity));
-        cloudShadow = rgb565((uint8_t)(shadowR * opacity), (uint8_t)(shadowG * opacity), (uint8_t)(shadowB * opacity));
+      if (distSq < fadeRadiusSq) {
+        float fade = sqrtf(distSq) / fadeRadius;
+        if (fade < 0.3f) continue;  // Bee bursts through center
+        cloudMain = rgb565((uint8_t)(mainR * fade), (uint8_t)(mainG * fade), (uint8_t)(mainB * fade));
+        cloudShadow = rgb565((uint8_t)(shadR * fade), (uint8_t)(shadG * fade), (uint8_t)(shadB * fade));
       }
 
-      // Draw puffy cloud shape (multiple overlapping ellipses) - larger structure
-      g.fillCircle(sx + ox, sy + 2 + oy, cloudH, cloudShadow);
-      g.fillCircle(sx - cloudW/3 + ox, sy + oy, cloudH - 2, cloudMain);
-      g.fillCircle(sx + cloudW/3 + ox, sy + oy, cloudH - 2, cloudMain);
-      g.fillCircle(sx + ox, sy - 2 + oy, cloudH, cloudMain);
-      g.fillCircle(sx - cloudW/5 + ox, sy - cloudH/3 + oy, cloudH - 3, cloudMain);
-      g.fillCircle(sx + cloudW/5 + ox, sy - cloudH/3 + oy, cloudH - 3, cloudMain);
+      // Draw puffy cloud: shadow layer, then main puffs
+      int cx_ofs = sx + ox, cy_ofs = sy + oy;
+      g.fillCircle(cx_ofs, cy_ofs + 2, cloudH, cloudShadow);
+      g.fillCircle(cx_ofs - cloudW / 3, cy_ofs, cloudH - 2, cloudMain);
+      g.fillCircle(cx_ofs + cloudW / 3, cy_ofs, cloudH - 2, cloudMain);
+      g.fillCircle(cx_ofs, cy_ofs - 2, cloudH, cloudMain);
+      g.fillCircle(cx_ofs - cloudW / 5, cy_ofs - cloudH / 3, cloudH - 3, cloudMain);
+      g.fillCircle(cx_ofs + cloudW / 5, cy_ofs - cloudH / 3, cloudH - 3, cloudMain);
     }
   }
 }
