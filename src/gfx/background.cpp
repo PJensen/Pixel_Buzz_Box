@@ -322,18 +322,25 @@ void gfx_drawCloudLayer(Adafruit_GFX &g, int tileX, int tileY, int ox, int oy,
       int cloudW = 18 + (int)((h >> 16) & 0x1Fu);  // 18-49
       int cloudH = 10 + (int)((h >> 20) & 0xFu);   // 10-25
 
-      // Fade cloud when bee flies through it
+      // Fade cloud when bee flies through it (use logical distance without shake)
       uint16_t cloudMain = baseMain;
       uint16_t cloudShadow = baseShadow;
 
-      int dx = sx - beeSX, dy = sy - beeSY;
-      float distSq = (float)(dx * dx + dy * dy);
+      // Calculate distance without shake for consistent fade behavior
+      float logicalDx = ((float)wx - camX) * camera.zoom;
+      float logicalDy = ((float)wy - camY) * camera.zoom;
+      float distSq = logicalDx * logicalDx + logicalDy * logicalDy;
       float fadeRadius = (float)(cloudW + cloudH);
       float fadeRadiusSq = fadeRadius * fadeRadius;
 
       if (distSq < fadeRadiusSq) {
-        float fade = sqrtf(distSq) / fadeRadius;
-        if (fade < 0.3f) continue;  // Bee bursts through center
+        float dist = sqrtf(distSq);
+        // Smooth fade from fully visible at edge to nearly invisible at center
+        float fade = dist / fadeRadius;
+        // Apply easing for smoother transition (ease-in-out)
+        fade = fade * fade * (3.0f - 2.0f * fade);
+        // Minimum visibility of 15% so cloud doesn't completely vanish
+        fade = 0.15f + fade * 0.85f;
         cloudMain = rgb565((uint8_t)(mainR * fade), (uint8_t)(mainG * fade), (uint8_t)(mainB * fade));
         cloudShadow = rgb565((uint8_t)(shadR * fade), (uint8_t)(shadG * fade), (uint8_t)(shadB * fade));
       }
