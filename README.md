@@ -1,9 +1,11 @@
 # Pixel Buzz Box
 
+
+
 A real-time arcade survival game for the Raspberry Pi Pico featuring a bee collecting pollen in an infinite procedurally-generated world.
 
 <!-- TODO: Add demo video/image here -->
-![Pixel Buzz Box Demo](demo.gif)
+![Pixel Buzz Box Demo](https://raw.githubusercontent.com/PJensen/Pixel_Buzz_Box/refs/heads/main/pixel_buzz_box_demo.gif)
 
 ## Overview
 
