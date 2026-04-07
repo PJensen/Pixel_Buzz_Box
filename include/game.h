@@ -127,6 +127,13 @@ float getDayTransitionProgress(uint32_t nowMs);
 // World boundary (grows with each day)
 float getWorldBoundary();
 
+// ==================== MOTOR (motor.cpp) ====================
+void motorBegin();
+void motorBuzz(uint32_t durationMs, uint32_t nowMs);
+void motorRamp(uint32_t nowMs);
+void motorUpdate(uint32_t nowMs);
+void motorStop();
+
 // ==================== WASP (wasp.cpp) ====================
 extern Wasp wasps[Pool::WASP_MAX];
 extern uint32_t beeInvulnUntilMs;

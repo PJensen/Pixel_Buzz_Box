@@ -19,3 +19,6 @@ static const int PIN_JOY_VRY = 27;  // GP27/ADC1 (phys 32) - Y Axis
 
 // -------------------- BUZZER --------------------
 static const int PIN_BUZZ = 15;     // GP15 (phys 20)
+
+// -------------------- MOTOR --------------------
+static const int PIN_MOTOR = 13;    // GP13 (phys 17) - 3V vibration motor via driver

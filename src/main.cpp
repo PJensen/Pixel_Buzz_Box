@@ -27,6 +27,10 @@ BuzzSynth buzzer(PIN_BUZZ);
 
 // -------------------- SETUP --------------------
 void setup() {
+  // Kill motor noise immediately (pin floats before motorBegin)
+  pinMode(PIN_MOTOR, OUTPUT);
+  digitalWrite(PIN_MOTOR, LOW);
+
   // Backlight
   pinMode(PIN_BL, OUTPUT);
   digitalWrite(PIN_BL, HIGH);
@@ -36,6 +40,10 @@ void setup() {
 
   // Audio
   buzzer.begin();
+
+  // Haptic motor
+  motorBegin();
+  motorRamp(millis());
 
   // SPI display
   SPI.setSCK(PIN_SCK);
@@ -121,6 +129,7 @@ void loop() {
     wasBoosting = false;
     stopBeeMovement();
     buzzer.stopAll();
+    motorStop();
     updateTrailParticles(now);
     updateScorePopups(now);
 
@@ -156,6 +165,9 @@ void loop() {
     updateScorePopups(now);
   }
 
+  // Haptic motor tick
+  motorUpdate(now);
+
   // Survival timer
   updateSurvivalTimer(dt, now);
 
@@ -174,6 +186,7 @@ void loop() {
   if (survival.isGameOver) {
     if (!soundStopped) {
       buzzer.stopAll();
+      motorStop();
       hive.isUnloading = false;
       hive.unloadRemaining = 0;
       hive.unloadTotal = 0;
@@ -280,6 +293,7 @@ void loop() {
       applyPollenPenalty(WaspCfg::POLLEN_PENALTY);
       stunBee(now);
       buzzer.startSound(SND_WASP_HIT, now);
+      motorBuzz(Motor::WASP_HIT_MS, now);
       triggerCameraShake(now, 8.0f, 250);
     }
 

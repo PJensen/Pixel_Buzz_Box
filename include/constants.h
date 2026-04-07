@@ -232,6 +232,16 @@ namespace Magnet {
 }
 
 // ============================================================================
+// MOTOR (haptic vibration)
+// ============================================================================
+namespace Motor {
+  constexpr uint16_t PWM_FREQ = 250;           // Hz - vibration frequency
+  constexpr uint8_t  PWM_DUTY = 200;           // 0-255 duty cycle (intensity)
+  constexpr uint32_t WASP_HIT_MS = 300;        // Vibration duration on wasp hit
+  constexpr uint32_t STARTUP_RAMP_MS = 400;    // Ramp-up duration at boot
+}
+
+// ============================================================================
 // WASP
 // ============================================================================
 namespace WaspCfg {
